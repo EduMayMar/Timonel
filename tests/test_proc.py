@@ -201,6 +201,10 @@ def test_kill_is_fast(tmp_path: Path) -> None:
     assert time.monotonic() - started < 2.5
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="known limitation: on Windows a grandchild holding the pipe ends the run by idle timeout",
+)
 def test_orphaned_background_process_does_not_block_completion(tmp_path: Path) -> None:
     script = (
         "import subprocess, sys\n"

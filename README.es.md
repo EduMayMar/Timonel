@@ -238,6 +238,11 @@ ConPTY mediante `pywinpty` en Windows (se instala solo en Windows). Si `doctor` 
 sustitución y normaliza CRLF. Si un agente escribe en otra página de códigos, define `PYTHONUTF8=1` o
 configura el CLI para emitir UTF-8.
 
+**Windows: una ejecución espera al timeout de inactividad aunque el agente terminó.** El agente dejó
+un proceso en segundo plano (un servidor de desarrollo o un vigilante) con su salida abierta. En macOS
+y Linux Timonel detecta que el agente salió y detiene lo que quedó; en Windows espera
+`execution.idle_timeout_s`. Baja ese valor o pide al agente que no deje procesos en segundo plano.
+
 **`claude` rechaza `--permission-prompts`.** Requiere Claude Code 2.1.259 o posterior. Actualiza
 Claude Code o quita el flag de `agents.claude.base_args`.
 
