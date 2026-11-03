@@ -161,6 +161,20 @@ dl.keys dt { font-family: var(--mono); }
 dl.keys dd { margin: 0; color: var(--ink-2); }
 kbd.k { font: .8rem var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 .35em; background: var(--code); }
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--s4); align-items: start; }
+.cmd { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.cmd code { font-family: var(--mono); background: var(--code); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s1) var(--s2); overflow-wrap: anywhere; }
+ul.plain { list-style: none; padding: 0; margin: 0; }
+.setup-item header { justify-content: flex-start; }
+dl.options { margin: 0; }
+.option { display: grid; grid-template-columns: minmax(12rem, 1fr) 2fr; gap: var(--s3); padding: var(--s3) 0; border-top: 1px solid var(--line); }
+.option dt { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.option dd { margin: 0; }
+.sticky { position: sticky; top: var(--s4); align-self: start; }
+nav a.spot { outline: 3px solid var(--brass); outline-offset: 2px; }
+progress { width: 100%; accent-color: var(--brass); }
+:root[data-density="compact"] main > * + * { margin-top: var(--s3); }
+:root[data-density="compact"] .card { padding: var(--s3); }
+@media (max-width: 760px) { .option { grid-template-columns: 1fr; } .sticky { position: static; } }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 960px) {
   .split, .cols-2 { grid-template-columns: 1fr; }
@@ -196,11 +210,13 @@ kbd.k { font: .8rem var(--mono); border: 1px solid var(--line); border-bottom-wi
     </a>
     <nav aria-label="Main">
       <ul>
-        <li><a href="#/panel" data-view="panel"><span data-i18n="nav.panel">Panel</span><kbd>p</kbd></a></li>
-        <li><a href="#/new" data-view="new"><span data-i18n="nav.new">New task</span><kbd>n</kbd></a></li>
-        <li><a href="#/history" data-view="history"><span data-i18n="nav.history">History</span><kbd>h</kbd></a></li>
-        <li><a href="#/stats" data-view="stats"><span data-i18n="nav.stats">Statistics</span><kbd>s</kbd></a></li>
-        <li><a href="#/routes" data-view="routes"><span data-i18n="nav.routes">Routes</span><kbd>r</kbd></a></li>
+        <li><a href="#/panel" data-view="panel"><span data-i18n="nav.panel">Panel</span><kbd data-shortcut="panel">p</kbd></a></li>
+        <li><a href="#/new" data-view="new"><span data-i18n="nav.new">New task</span><kbd data-shortcut="new">n</kbd></a></li>
+        <li><a href="#/history" data-view="history"><span data-i18n="nav.history">History</span><kbd data-shortcut="history">h</kbd></a></li>
+        <li><a href="#/stats" data-view="stats"><span data-i18n="nav.stats">Statistics</span><kbd data-shortcut="stats">s</kbd></a></li>
+        <li><a href="#/routes" data-view="routes"><span data-i18n="nav.routes">Routes</span><kbd data-shortcut="routes">r</kbd></a></li>
+        <li><a href="#/setup" data-view="setup"><span data-i18n="nav.setup">Setup</span><kbd data-shortcut="setup">i</kbd></a></li>
+        <li><a href="#/settings" data-view="settings"><span data-i18n="nav.settings">Settings</span><kbd data-shortcut="settings">c</kbd></a></li>
       </ul>
     </nav>
     <div class="rail-foot">
@@ -208,6 +224,7 @@ kbd.k { font: .8rem var(--mono); border: 1px solid var(--line); border-bottom-wi
         <button type="button" class="ghost" id="theme-toggle"><span data-i18n="theme">Theme</span>: <span id="theme-label">auto</span></button>
         <button type="button" class="ghost" id="lang-toggle" aria-label="Language">ES</button>
         <button type="button" class="ghost" id="keys-open" aria-label="Keyboard shortcuts">?</button>
+        <button type="button" class="ghost" id="tour-open" data-i18n="tour.start">Tour</button>
       </div>
       <div class="muted-line" id="repo-line"></div>
       <div class="muted-line">v{{VERSION}}</div>
@@ -219,7 +236,7 @@ kbd.k { font: .8rem var(--mono); border: 1px solid var(--line); border-bottom-wi
 <dialog id="keys">
   <h2 data-i18n="keys.title">Keyboard shortcuts</h2>
   <dl class="keys">
-    <dt>p n h s r</dt><dd data-i18n="keys.nav">Panel, new task, history, statistics, routes</dd>
+    <dt id="keys-views">p n h s r i c</dt><dd data-i18n="keys.nav">Panel, new task, history, statistics, routes, setup, settings</dd>
     <dt>Ctrl+Enter</dt><dd data-i18n="keys.submit">Preview the plan, then launch</dd>
     <dt>t</dt><dd data-i18n="keys.theme">Cycle theme</dd>
     <dt>l</dt><dd data-i18n="keys.lang">Switch language</dd>
@@ -227,83 +244,26 @@ kbd.k { font: .8rem var(--mono); border: 1px solid var(--line); border-bottom-wi
   </dl>
   <p><button type="button" class="primary" id="keys-close" data-i18n="close">Close</button></p>
 </dialog>
+<dialog id="tour" aria-labelledby="tour-h">
+  <h2 id="tour-h"></h2>
+  <p></p>
+  <p class="toolbar"><button type="button" class="primary" data-next></button><button type="button" class="ghost" data-skip data-i18n="tour.skip">Skip</button></p>
+</dialog>
 <script nonce="{{NONCE}}">
 "use strict";
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
-const I18N = {
-  en: {
-    skip: "Skip to content", tagline: "agent router", close: "Close", theme: "Theme",
-    "nav.panel": "Panel", "nav.new": "New task", "nav.history": "History", "nav.stats": "Statistics", "nav.routes": "Routes",
-    "keys.title": "Keyboard shortcuts", "keys.nav": "Panel, new task, history, statistics, routes", "keys.submit": "Preview the plan, then launch",
-    "keys.theme": "Cycle theme", "keys.lang": "Switch language", "keys.help": "This help",
-    "panel.title": "Panel", "panel.lede": "Agent health, today's spend and what is running.", "panel.agents": "Agents",
-    "panel.spend": "Spend today", "panel.queue": "Running now", "panel.recent": "Recent runs", "panel.refresh": "Check agents again",
-    "panel.none": "Nothing running.", "panel.usable": "ready", "panel.unusable": "unavailable", "panel.cooling": "cooling down",
-    "agent.missing": "not installed", "agent.verified": "flags verified", "agent.unverified": "flags unverified",
-    "new.title": "New task", "new.lede": "Describe the change. Timonel classifies it, picks a route and shows you why before anything runs.",
-    "new.task": "Task", "new.placeholder": "e.g. Fix the crash when config.yaml is empty and add a regression test",
-    "new.profile": "Profile", "new.race": "Race two agents", "new.decompose": "Split into subtasks",
-    "new.preview": "Preview plan", "new.launch": "Launch", "new.route": "Route", "new.reasons": "Why this route",
-    "new.edit": "Drag rungs to reorder, or edit agent, model and effort. Each tier is one escalation step.",
-    "new.add": "Add rung", "new.remove": "Remove", "new.up": "Move up", "new.down": "Move down", "new.tier": "Tier",
-    "new.classification": "Classification", "new.write": "writes in an isolated worktree", "new.readonly": "read-only",
-    "run.title": "Run", "run.timeline": "Timeline", "run.output": "Live output", "run.diff": "Diff", "run.apply": "Apply to repository",
-    "run.discard": "Discard", "run.cancel": "Cancel", "run.result": "Result", "run.nodiff": "No pending changes.",
-    "run.confirm.apply": "Merge this branch into the repository?", "run.confirm.discard": "Delete this run's worktree and branch?",
-    "history.title": "History", "history.lede": "Every run and attempt is kept in the local ledger.", "history.search": "Search tasks",
-    "history.status": "Status", "history.all": "All", "history.empty": "No runs match.",
-    "col.id": "Run", "col.status": "Status", "col.task": "Task", "col.profile": "Profile", "col.changes": "Changes", "col.when": "When",
-    "col.agent": "Agent", "col.attempts": "Attempts", "col.success": "Success", "col.cost": "Cost", "col.latency": "Mean time",
-    "stats.title": "Statistics", "stats.lede": "Success, cost and latency measured from your own runs.",
-    "stats.success": "Success rate by agent", "stats.cost": "Cost by agent", "stats.latency": "Mean time by agent", "stats.tier": "By tier",
-    "stats.savings": "Savings", "stats.saved": "saved versus always using the top tier", "stats.nosavings": "Not enough cost data yet",
-    "stats.empty": "No attempts recorded yet.", "stats.known": "known",
-    "routes.title": "Routes", "routes.lede": "The ladder for each tier. Subscriptions are tried before pay-per-use APIs within a tier.",
-    "routes.save": "Validate and save", "routes.saved": "Saved", "routes.reset": "Reload", "routes.file": "File",
-    "status.succeeded": "succeeded", "status.failed": "failed", "status.running": "running", "status.planning": "planning",
-    "status.cancelled": "cancelled", "status.applied": "applied", "status.discarded": "discarded", "status.interrupted": "interrupted",
-    "error": "Something went wrong", "loading": "Loading…"
-  },
-  es: {
-    skip: "Saltar al contenido", tagline: "enrutador de agentes", close: "Cerrar", theme: "Tema",
-    "nav.panel": "Panel", "nav.new": "Nueva tarea", "nav.history": "Historial", "nav.stats": "Estadísticas", "nav.routes": "Rutas",
-    "keys.title": "Atajos de teclado", "keys.nav": "Panel, nueva tarea, historial, estadísticas, rutas", "keys.submit": "Ver el plan y después lanzar",
-    "keys.theme": "Cambiar tema", "keys.lang": "Cambiar idioma", "keys.help": "Esta ayuda",
-    "panel.title": "Panel", "panel.lede": "Salud de los agentes, gasto de hoy y lo que está en marcha.", "panel.agents": "Agentes",
-    "panel.spend": "Gasto de hoy", "panel.queue": "En ejecución", "panel.recent": "Ejecuciones recientes", "panel.refresh": "Comprobar agentes",
-    "panel.none": "Nada en ejecución.", "panel.usable": "listo", "panel.unusable": "no disponible", "panel.cooling": "en enfriamiento",
-    "agent.missing": "no instalado", "agent.verified": "flags verificados", "agent.unverified": "flags sin verificar",
-    "new.title": "Nueva tarea", "new.lede": "Describe el cambio. Timonel lo clasifica, elige una ruta y te explica por qué antes de ejecutar nada.",
-    "new.task": "Tarea", "new.placeholder": "p. ej. Corrige el fallo cuando config.yaml está vacío y añade una prueba de regresión",
-    "new.profile": "Perfil", "new.race": "Carrera entre dos agentes", "new.decompose": "Dividir en subtareas",
-    "new.preview": "Ver plan", "new.launch": "Lanzar", "new.route": "Ruta", "new.reasons": "Por qué esta ruta",
-    "new.edit": "Arrastra los peldaños para reordenar o edita agente, modelo y esfuerzo. Cada nivel es un paso de escalado.",
-    "new.add": "Añadir peldaño", "new.remove": "Quitar", "new.up": "Subir", "new.down": "Bajar", "new.tier": "Nivel",
-    "new.classification": "Clasificación", "new.write": "escribe en un worktree aislado", "new.readonly": "solo lectura",
-    "run.title": "Ejecución", "run.timeline": "Línea de tiempo", "run.output": "Salida en vivo", "run.diff": "Diff", "run.apply": "Aplicar al repositorio",
-    "run.discard": "Descartar", "run.cancel": "Cancelar", "run.result": "Resultado", "run.nodiff": "No hay cambios pendientes.",
-    "run.confirm.apply": "¿Fusionar esta rama en el repositorio?", "run.confirm.discard": "¿Borrar el worktree y la rama de esta ejecución?",
-    "history.title": "Historial", "history.lede": "Cada ejecución e intento queda en el registro local.", "history.search": "Buscar tareas",
-    "history.status": "Estado", "history.all": "Todos", "history.empty": "Ninguna ejecución coincide.",
-    "col.id": "Ejecución", "col.status": "Estado", "col.task": "Tarea", "col.profile": "Perfil", "col.changes": "Cambios", "col.when": "Cuándo",
-    "col.agent": "Agente", "col.attempts": "Intentos", "col.success": "Éxito", "col.cost": "Costo", "col.latency": "Tiempo medio",
-    "stats.title": "Estadísticas", "stats.lede": "Éxito, costo y latencia medidos con tus propias ejecuciones.",
-    "stats.success": "Tasa de éxito por agente", "stats.cost": "Costo por agente", "stats.latency": "Tiempo medio por agente", "stats.tier": "Por nivel",
-    "stats.savings": "Ahorro", "stats.saved": "ahorrado frente a usar siempre el nivel más alto", "stats.nosavings": "Aún no hay datos de costo suficientes",
-    "stats.empty": "Aún no hay intentos registrados.", "stats.known": "conocidos",
-    "routes.title": "Rutas", "routes.lede": "La escalera de cada nivel. Dentro de un nivel se prueban antes las suscripciones que las APIs de pago.",
-    "routes.save": "Validar y guardar", "routes.saved": "Guardado", "routes.reset": "Recargar", "routes.file": "Archivo",
-    "status.succeeded": "completada", "status.failed": "fallida", "status.running": "en curso", "status.planning": "planificando",
-    "status.cancelled": "cancelada", "status.applied": "aplicada", "status.discarded": "descartada", "status.interrupted": "interrumpida",
-    "error": "Algo salió mal", "loading": "Cargando…"
-  }
-};
+const I18N = {{I18N}};
+const SETTINGS = {{SETTINGS}};
+const LANGS = Object.keys(I18N);
 const store = {
   get(key, fallback) { try { return localStorage.getItem(key) || fallback; } catch (_) { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, value); } catch (_) { } }
 };
-let lang = store.get("timonel.lang", (navigator.language || "en").toLowerCase().startsWith("es") ? "es" : "en");
-let theme = store.get("timonel.theme", "auto");
+let lang = store.get("timonel.lang", SETTINGS.language || (navigator.language || "en").slice(0, 2).toLowerCase());
+if (!I18N[lang]) lang = "en";
+let theme = store.get("timonel.theme", SETTINGS.theme);
+let mode = SETTINGS.mode;
+const SHORTCUTS = SETTINGS.shortcuts;
 const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
 let live = null;
 let draft = { task: "", profile: "balanced", race: false, decompose: false, plan: null };
@@ -324,7 +284,10 @@ function h(tag, attrs, ...children) {
   return node;
 }
 
+let routeSeq = 0;
+
 async function api(path, options = {}) {
+  const seq = routeSeq;
   const init = { method: options.method || "GET", headers: { "Accept": "application/json" }, credentials: "same-origin" };
   if (init.method !== "GET") {
     init.headers["Content-Type"] = "application/json";
@@ -333,6 +296,7 @@ async function api(path, options = {}) {
   }
   const response = await fetch(path, init);
   const data = await response.json().catch(() => ({}));
+  if (init.method === "GET" && seq !== routeSeq) return new Promise(() => {});
   if (!response.ok) {
     const error = new Error(data.error || `${response.status}`);
     error.details = data.details;
@@ -735,17 +699,250 @@ async function viewRoutes() {
   render();
 }
 
+const AUTH_TONE = { ok: "b-ok", missing: "b-warn", unknown: "b-mute" };
+
+function copyButton(text) {
+  return h("button", { type: "button", class: "ghost", "aria-label": `${t("setup.copy")}: ${text}`, onclick: async () => {
+    try { await navigator.clipboard.writeText(text); toast(t("setup.copied")); } catch (_) { toast(text); }
+  } }, t("setup.copy"));
+}
+
+function commandLine(text) {
+  return h("div", { class: "cmd" }, h("code", { text }), copyButton(text));
+}
+
+async function installAction(item, output) {
+  output.replaceChildren(h("p", { class: "meta", text: t("loading") }));
+  try {
+    const preview = await api("/api/setup/install", { method: "POST", body: { key: item.key } });
+    if (preview.status === "terminal") {
+      output.replaceChildren(h("p", { class: "hint", text: preview.manual ? t("setup.manual") : t("setup.terminal") }),
+        preview.manual ? h("p", {}, h("a", { href: preview.manual, rel: "noopener noreferrer", target: "_blank", text: preview.manual })) : commandLine(preview.command));
+      return;
+    }
+    const size = preview.size_mb ? ` (~${preview.size_mb} MB)` : "";
+    if (!confirm(`${t("setup.confirm")}\n\n${preview.command}${size}`)) { output.replaceChildren(); return; }
+    output.replaceChildren(h("p", { class: "meta", role: "status", text: t("setup.installing") }));
+    const result = await api("/api/setup/install", { method: "POST", body: { key: item.key, confirm: true } });
+    output.replaceChildren(
+      h("p", { class: `badge ${result.status === "installed" ? "b-ok" : "b-warn"}`, text: `${t("setup.result")}: ${result.status}` }),
+      result.undo ? h("p", { class: "hint", text: `${t("setup.undo")}: ${result.undo}` }) : null,
+      h("pre", { class: "console", text: (result.lines || []).join("\n") }));
+  } catch (error) {
+    output.replaceChildren(h("div", { class: "problems", role: "alert", text: error.message }));
+  }
+}
+
+function setupItem(item) {
+  const output = h("div", { "aria-live": "polite" });
+  let badge;
+  if (!item.installed) badge = h("span", { class: "badge b-mute", text: t("agent.missing") });
+  else if (item.auth && item.auth !== "ok") badge = h("span", { class: `badge ${AUTH_TONE[item.auth] || "b-warn"}`, text: t("setup.login_needed") });
+  else badge = h("span", { class: "badge b-ok", text: t("setup.ready") });
+  const actions = h("div", { class: "toolbar" });
+  if (!item.installed) actions.append(h("button", { type: "button", class: "primary", onclick: () => installAction(item, output) }, t("setup.install")));
+  if (item.installed && item.login && item.auth !== "ok") {
+    actions.append(h("button", { type: "button", onclick: () => output.replaceChildren(h("p", { class: "hint", text: t("setup.login_hint") }), commandLine(item.login)) }, t("setup.login")));
+  }
+  if (item.key_env) {
+    actions.append(h("button", { type: "button", onclick: () => output.replaceChildren(h("p", { class: "hint", text: t("setup.key_hint") }), commandLine(`timonel keys set ${item.key_env}`)) }, t("setup.key")));
+  }
+  return h("li", { class: "card setup-item", "data-key": item.key },
+    h("header", { class: "toolbar" }, h("b", { text: item.title }), badge, item.enabled ? null : h("span", { class: "tag", text: t("setup.disabled") })),
+    h("p", { class: "meta", text: item.what }),
+    item.install.command && !item.installed ? h("p", { class: "meta" }, `${t("setup.command")}: `, h("code", { text: item.install.command })) : null,
+    actions, output);
+}
+
+async function viewSetup() {
+  const data = await api("/api/setup");
+  const groups = [["tool", "setup.tools"], ["agent", "setup.agents"], ["provider", "setup.providers"]];
+  const shown = (item) => item.kind === "tool" || item.enabled || mode === "expert";
+  const done = data.items.filter((item) => shown(item) && item.installed && (!item.auth || item.auth === "ok")).length;
+  const total = data.items.filter(shown).length;
+  page(t("setup.title"), t("setup.lede"),
+    h("div", { class: "grid cols-3" },
+      h("section", { class: "card" }, h("h3", { text: t("setup.progress") }), h("div", { class: "figure", text: `${done} / ${total}` }),
+        h("progress", { max: String(total), value: String(done), "aria-label": t("setup.progress") })),
+      h("section", { class: "card" }, h("h3", { text: t("setup.system") }), h("p", { class: "meta", text: `${data.os} · ${data.managers.join(", ") || "—"}` }), h("p", { class: "meta", text: `${t("setup.keyring")}: ${data.keyring || "—"}` })),
+      h("section", { class: "card" }, h("h3", { text: t("setup.project") }),
+        h("p", { class: "meta", text: data.project.path || t("setup.no_project") }),
+        data.project.path && !data.project.trusted ? commandLine("timonel trust") : null)),
+    h("p", { class: "hint", text: t("setup.privacy") }),
+    ...groups.map(([kind, title]) => {
+      const items = data.items.filter((item) => item.kind === kind && shown(item));
+      return items.length ? h("section", { class: "stack", "aria-labelledby": `setup-${kind}` },
+        h("h2", { id: `setup-${kind}`, text: t(title) }), h("ul", { class: "grid cols-2 plain" }, items.map(setupItem))) : null;
+    }),
+    h("p", { class: "hint" }, t("setup.cli_hint"), " ", h("code", { text: "timonel start" })));
+}
+
+const AREAS = ["general", "routing", "agents", "classifier", "review", "escalation", "verification", "execution", "budgets", "privacy", "ui", "notifications", "hooks", "paths"];
+
+function optionInput(option, current, onchange) {
+  const id = `opt-${option.key.replace(/[^a-z0-9]/gi, "-")}`;
+  const common = { id, "aria-describedby": `${id}-d` };
+  if (option.type === "boolean") return h("input", { ...common, type: "checkbox", checked: current === true, onchange: (event) => onchange(event.target.checked) });
+  if (option.enum) return h("select", { ...common, onchange: (event) => onchange(event.target.value) }, option.enum.map((value) => h("option", { value, selected: value === current }, String(value))));
+  if (option.type === "integer" || option.type === "number") {
+    return h("input", { ...common, type: "number", value: current ?? "", min: option.minimum ?? null, max: option.maximum ?? null, step: option.type === "integer" ? "1" : "any",
+      onchange: (event) => onchange(event.target.value === "" ? undefined : Number(event.target.value)) });
+  }
+  if (option.type === "array" && (option.items === "string" || !option.items)) {
+    return h("textarea", { ...common, rows: "3", oninput: (event) => onchange(event.target.value.split("\n").map((line) => line.trim()).filter(Boolean)) }, Array.isArray(current) ? current.join("\n") : "");
+  }
+  if (option.type === "string") return h("input", { ...common, type: "text", value: current ?? "", oninput: (event) => onchange(event.target.value) });
+  return h("p", { class: "meta" }, t("settings.yaml_only"), " ", h("code", { text: JSON.stringify(current ?? null).slice(0, 80) }));
+}
+
+function setPath(target, path, value) {
+  const keys = path.split(".");
+  let node = target;
+  for (const key of keys.slice(0, -1)) {
+    if (typeof node[key] !== "object" || node[key] === null || Array.isArray(node[key])) node[key] = {};
+    node = node[key];
+  }
+  if (value === undefined) delete node[keys[keys.length - 1]]; else node[keys[keys.length - 1]] = value;
+}
+
+function getPath(target, path) {
+  return path.split(".").reduce((node, key) => (node && typeof node === "object" ? node[key] : undefined), target);
+}
+
+async function viewSettings() {
+  const data = await api("/api/config");
+  let user = JSON.parse(JSON.stringify(data.user || {}));
+  let filter = "";
+  let area = "all";
+  let advanced = mode === "expert";
+  const list = h("div", { class: "stack" });
+  const preview = h("pre", { class: "console", "aria-label": t("settings.preview") });
+  const problems = h("div", { "aria-live": "polite" });
+  let timer = null;
+
+  async function check() {
+    try {
+      const result = await api("/api/config/validate", { method: "POST", body: { values: user } });
+      preview.textContent = result.yaml;
+      problems.replaceChildren(result.problems.length ? h("div", { class: "problems", role: "alert", text: result.problems.join("\n") }) : h("p", { class: "badge b-ok", text: t("settings.valid") }));
+    } catch (error) { problems.replaceChildren(h("div", { class: "problems", role: "alert", text: error.message })); }
+  }
+
+  function changed() { clearTimeout(timer); timer = setTimeout(check, 250); render(); }
+
+  function render() {
+    const words = filter.toLowerCase();
+    const visible = data.options.filter((option) => (advanced || !option.advanced) && (area === "all" || option.area === area) &&
+      (!words || option.key.toLowerCase().includes(words) || (option.description[lang] || "").toLowerCase().includes(words)));
+    const byArea = {};
+    for (const option of visible) (byArea[option.area] = byArea[option.area] || []).push(option);
+    list.replaceChildren(...(visible.length ? Object.entries(byArea).map(([name, options]) => h("section", { class: "card flat", "aria-labelledby": `area-${name}` },
+      h("h2", { id: `area-${name}`, text: t(`settings.area.${name}`) }),
+      h("dl", { class: "options" }, options.map((option) => {
+        const own = getPath(user, option.key);
+        const current = own !== undefined ? own : option.value;
+        const id = `opt-${option.key.replace(/[^a-z0-9]/gi, "-")}`;
+        return h("div", { class: "option", "data-key": option.key },
+          h("dt", {}, h("label", { for: id }, h("code", { text: option.key })),
+            own !== undefined ? h("span", { class: "badge b-info", text: t("settings.modified") }) : null,
+            option.origin !== "default" && own === undefined ? h("span", { class: "tag", text: `${t("settings.layer")}: ${option.origin}` }) : null,
+            option.advanced ? h("span", { class: "tag", text: t("settings.advanced_tag") }) : null),
+          h("dd", {}, optionInput(option, current, (value) => { setPath(user, option.key, value); changed(); }),
+            h("p", { class: "hint", id: `${id}-d`, text: option.description[lang] || option.description.en }),
+            own !== undefined ? h("button", { type: "button", class: "ghost", onclick: () => { setPath(user, option.key, undefined); changed(); } }, t("settings.reset_one")) : null));
+      })))) : [h("p", { class: "empty", text: t("settings.none") })]));
+  }
+
+  async function save() {
+    try {
+      const result = await api("/api/config", { method: "PUT", body: { values: user } });
+      toast(`${t("routes.saved")}: ${result.saved}`);
+      data.options = result.options;
+      user = JSON.parse(JSON.stringify(result.user || {}));
+      render();
+      check();
+    } catch (error) { problems.replaceChildren(h("div", { class: "problems", role: "alert", text: [error.message, ...(error.details || [])].join("\n") })); }
+  }
+
+  async function importYaml() {
+    const text = prompt(t("settings.import_prompt"));
+    if (!text) return;
+    try {
+      const result = await api("/api/config/validate", { method: "POST", body: { yaml: text } });
+      if (result.problems.length) { problems.replaceChildren(h("div", { class: "problems", role: "alert", text: result.problems.join("\n") })); return; }
+      if (!confirm(t("settings.import_confirm"))) return;
+      await api("/api/config", { method: "PUT", body: { yaml: text } });
+      route();
+    } catch (error) { problems.replaceChildren(h("div", { class: "problems", role: "alert", text: error.message })); }
+  }
+
+  function exportYaml() {
+    const link = h("a", { href: URL.createObjectURL(new Blob([preview.textContent], { type: "text/yaml" })), download: "timonel.yaml" });
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }
+
+  page(t("settings.title"), t("settings.lede"),
+    h("p", { class: "meta", text: `${t("routes.file")}: ${data.path}` }),
+    h("div", { class: "toolbar" },
+      h("label", { class: "visually-hidden", for: "settings-search", text: t("settings.search") }),
+      h("input", { id: "settings-search", type: "search", placeholder: t("settings.search"), oninput: (event) => { filter = event.target.value; render(); } }),
+      h("label", { class: "visually-hidden", for: "settings-area", text: t("settings.area_label") }),
+      h("select", { id: "settings-area", onchange: (event) => { area = event.target.value; render(); } },
+        h("option", { value: "all", text: t("settings.all") }), AREAS.map((name) => h("option", { value: name, text: t(`settings.area.${name}`) }))),
+      h("label", { class: "check" }, h("input", { type: "checkbox", checked: advanced, onchange: (event) => { advanced = event.target.checked; render(); } }), t("settings.show_advanced"))),
+    h("div", { class: "split" }, list,
+      h("aside", { class: "stack sticky" }, h("h2", { text: t("settings.preview") }), preview, problems,
+        h("div", { class: "toolbar" },
+          h("button", { type: "button", class: "primary", onclick: save }, t("routes.save")),
+          h("button", { type: "button", onclick: exportYaml }, t("settings.export")),
+          h("button", { type: "button", onclick: importYaml }, t("settings.import")),
+          h("button", { type: "button", class: "danger", onclick: () => { if (confirm(t("settings.reset_confirm"))) { user = {}; changed(); } } }, t("settings.reset_all"))))));
+  render();
+  check();
+}
+
+const TOUR = ["panel", "new", "routes", "setup", "settings"];
+
+function startTour() {
+  const box = document.getElementById("tour");
+  let index = 0;
+  function show() {
+    const step = TOUR[index];
+    document.querySelectorAll("nav a").forEach((link) => link.classList.toggle("spot", link.dataset.view === step));
+    box.querySelector("h2").textContent = `${index + 1}/${TOUR.length} · ${t(`nav.${step}`)}`;
+    box.querySelector("p").textContent = t(`tour.${step}`);
+    box.querySelector("[data-next]").textContent = index === TOUR.length - 1 ? t("tour.done") : t("tour.next");
+  }
+  function end() {
+    document.querySelectorAll("nav a.spot").forEach((link) => link.classList.remove("spot"));
+    store.set("timonel.tour", "done");
+    box.close();
+  }
+  box.querySelector("[data-next]").onclick = () => { if (index === TOUR.length - 1) end(); else { index += 1; show(); } };
+  box.querySelector("[data-skip]").onclick = end;
+  box.addEventListener("cancel", end, { once: true });
+  show();
+  box.showModal();
+}
+
 function applyChrome() {
   document.documentElement.lang = lang;
+  document.documentElement.dataset.density = SETTINGS.density;
+  document.querySelectorAll("[data-shortcut]").forEach((node) => { node.textContent = SHORTCUTS[node.dataset.shortcut]; });
+  document.getElementById("keys-views").textContent = ["panel", "new", "history", "stats", "routes", "setup", "settings"].map((name) => SHORTCUTS[name]).join(" ");
   if (theme === "auto") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme", theme);
   document.getElementById("theme-label").textContent = theme;
-  document.getElementById("lang-toggle").textContent = lang === "en" ? "ES" : "EN";
-  document.getElementById("lang-toggle").setAttribute("aria-label", lang === "en" ? "Cambiar a español" : "Switch to English");
+  const next = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
+  document.getElementById("lang-toggle").textContent = next.toUpperCase();
+  document.getElementById("lang-toggle").setAttribute("aria-label", I18N[next]["lang.switch"]);
   document.querySelectorAll("[data-i18n]").forEach((node) => { node.textContent = t(node.dataset.i18n); });
 }
 
 async function route() {
+  routeSeq += 1;
   if (live && !location.hash.startsWith("#/run/")) { live.close(); live = null; }
   const [, view, arg] = (location.hash || "#/panel").split("/");
   document.querySelectorAll("nav a").forEach((link) => {
@@ -758,6 +955,8 @@ async function route() {
     else if (view === "history") await viewHistory();
     else if (view === "stats") await viewStats();
     else if (view === "routes") await viewRoutes();
+    else if (view === "setup") await viewSetup();
+    else if (view === "settings") await viewSettings();
     else await viewPanel();
   } catch (error) { failure(error); }
 }
@@ -768,7 +967,7 @@ document.getElementById("theme-toggle").addEventListener("click", () => {
   applyChrome();
 });
 document.getElementById("lang-toggle").addEventListener("click", () => {
-  lang = lang === "en" ? "es" : "en";
+  lang = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
   store.set("timonel.lang", lang);
   applyChrome();
   route();
@@ -783,15 +982,17 @@ document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") target.blur();
     return;
   }
-  const views = { p: "#/panel", n: "#/new", h: "#/history", s: "#/stats", r: "#/routes" };
+  const views = Object.fromEntries(["panel", "new", "history", "stats", "routes", "setup", "settings"].map((name) => [SHORTCUTS[name], `#/${name}`]));
   if (views[event.key]) { location.hash = views[event.key]; event.preventDefault(); }
-  else if (event.key === "t") document.getElementById("theme-toggle").click();
-  else if (event.key === "l") document.getElementById("lang-toggle").click();
+  else if (event.key === SHORTCUTS.theme) document.getElementById("theme-toggle").click();
+  else if (event.key === SHORTCUTS.language) document.getElementById("lang-toggle").click();
   else if (event.key === "?") keys.showModal();
 });
 window.addEventListener("hashchange", () => { route(); document.getElementById("main").focus({ preventScroll: true }); });
+document.getElementById("tour-open").addEventListener("click", startTour);
 applyChrome();
 route();
+if (SETTINGS.tour && store.get("timonel.tour", "") !== "done") startTour();
 </script>
 </body>
 </html>

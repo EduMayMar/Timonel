@@ -76,3 +76,32 @@ def test_errors_map_to_codes() -> None:
     detail = explain(TimonelError("TMN-8004", "sudo needed"))
     assert detail.link.endswith("#tmn-8004")
     assert detail.detail == "sudo needed"
+
+
+def test_every_key_the_web_page_uses_is_in_the_catalogs() -> None:
+    page = (LOCALES.parent / "web" / "index.html").read_text(encoding="utf-8")
+    used = set(re.findall(r'\bt\("([a-z0-9_.]+)"\)', page))
+    used |= set(re.findall(r'data-i18n="([a-z0-9_.]+)"', page))
+    for view in re.findall(r'data-view="([a-z]+)"', page):
+        used |= {f"nav.{view}"}
+    tour = re.search(r"const TOUR = \[([^\]]+)\]", page)
+    assert tour is not None
+    for step in re.findall(r'"([a-z]+)"', tour.group(1)):
+        used |= {f"tour.{step}", f"nav.{step}"}
+    areas = re.search(r"const AREAS = \[([^\]]+)\]", page)
+    assert areas is not None
+    used |= {f"settings.area.{name}" for name in re.findall(r'"([a-z]+)"', areas.group(1))}
+    for language in ("en", "es", "pt"):
+        catalog = load(language)
+        assert sorted(key for key in used if f"ui.{key}" not in catalog) == [], language
+
+
+def test_schema_areas_all_have_a_page_label() -> None:
+    from timonel import schema
+
+    english = load("en")
+    assert {option.area for option in schema.options()} <= {
+        key.removeprefix("ui.settings.area.")
+        for key in english
+        if key.startswith("ui.settings.area.")
+    }

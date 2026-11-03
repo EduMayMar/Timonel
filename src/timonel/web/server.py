@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import json
 import secrets
+import subprocess
 import threading
 import time
 import webbrowser
@@ -17,13 +18,23 @@ from urllib.parse import parse_qs, urlsplit
 
 import yaml
 
-from timonel import __version__, gitops
+from timonel import __version__, gitops, i18n, keys, schema, wizard
 from timonel.classify import KINDS, Classification, schema_errors
-from timonel.config import TIERS, Config, ConfigError, user_config_path, validate_text
+from timonel.config import (
+    TIERS,
+    Config,
+    ConfigError,
+    get_path,
+    load_config,
+    parse_yaml,
+    user_config_path,
+    validate_text,
+)
 from timonel.doctor import AgentHealth, diagnose
 from timonel.engine import Engine, RunError, RunOptions
 from timonel.gitops import GitError
 from timonel.ledger import Ledger, open_ledger
+from timonel.proc import LaunchError, resolve_launch
 from timonel.router import Plan, RoutingError, Step, parse_force
 from timonel.stats import spend_since, start_of_day, summary
 
@@ -120,6 +131,7 @@ class App:
         self.health: tuple[float, list[AgentHealth]] | None = None
         self.health_lock = threading.Lock()
         self.threads: dict[str, threading.Thread] = {}
+        self.install_lock = threading.Lock()
 
     @property
     def origins(self) -> set[str]:
@@ -212,6 +224,161 @@ class App:
             "path": str(self.config.source or user_config_path()),
         }
 
+    def page_settings(self) -> str:
+        ui = self.config.ui
+        data = {
+            "language": i18n.choose(self.config.language, self.engine.environ)
+            if self.config.language != "auto" or "TIMONEL_LANG" in self.engine.environ
+            else None,
+            "mode": self.config.mode,
+            "theme": ui.theme,
+            "density": ui.density,
+            "tour": ui.tour,
+            "shortcuts": asdict(ui.shortcuts),
+        }
+        return json.dumps(data).replace("<", "\\u003c")
+
+    def setup(self) -> dict[str, Any]:
+        environ = self.engine.environ
+        os_name = wizard.detect_os()
+        managers = wizard.detect_managers(environ)
+        items = []
+        for component in [*wizard.tool_components(), *wizard.agent_components(self.config)]:
+            agent = self.config.agents.get(component.key)
+            enabled = agent is None or agent.enabled
+            present = wizard.installed(component, environ)
+            spec = wizard.pick_install(component, os_name, managers)
+            items.append(
+                {
+                    "key": component.key,
+                    "kind": component.kind,
+                    "title": component.title,
+                    "what": component.what,
+                    "enabled": enabled,
+                    "installed": present,
+                    "auth": wizard.auth_state(component, self.config, environ)
+                    if present and enabled and agent is not None
+                    else None,
+                    "install": install_view(spec, component),
+                    "login": " ".join(component.login),
+                    "key_env": component.key_env,
+                    "homepage": component.homepage,
+                }
+            )
+        project = self.config.project
+        return {
+            "os": os_name,
+            "managers": managers,
+            "items": items,
+            "keyring": keys.backend_name(),
+            "config_path": str(self.config.source or user_config_path()),
+            "project": {
+                "path": str(project.path) if project.path else None,
+                "trusted": project.trusted,
+            },
+        }
+
+    def install(self, body: dict[str, Any]) -> dict[str, Any]:
+        key = str(body.get("key", ""))
+        components = {
+            item.key: item
+            for item in [*wizard.tool_components(), *wizard.agent_components(self.config)]
+        }
+        component = components.get(key)
+        if component is None:
+            raise ApiError(HTTPStatus.NOT_FOUND, f"unknown component {key!r}")
+        environ = self.engine.environ
+        spec = wizard.pick_install(component, wizard.detect_os(), wizard.detect_managers(environ))
+        view = install_view(spec, component)
+        if spec is None or not view["from_ui"]:
+            return {"status": "terminal", **view}
+        if body.get("confirm") is not True:
+            return {"status": "confirm", **view}
+        if not self.install_lock.acquire(blocking=False):
+            raise ApiError(HTTPStatus.CONFLICT, "another installation is running")
+        try:
+            lines: list[str] = []
+            session = wizard.Session(
+                ask=lambda prompt: "",
+                say=lines.append,
+                runner=captured_runner(lines),
+                environ=environ,
+                assume_yes=True,
+                allow=frozenset({key}),
+            )
+            plan = wizard.Plan(wizard.detect_os(), [], [component])
+            outcome = wizard.install_component(session, plan, component)
+        finally:
+            self.install_lock.release()
+        self.health = None
+        return {"status": outcome, "lines": [self.engine.redact(line) for line in lines], **view}
+
+    def config_view(self) -> dict[str, Any]:
+        target = self.config.source or user_config_path()
+        user = self.config.layers.get("user", {})
+        options = []
+        for option in schema.options():
+            node = option.node
+            options.append(
+                {
+                    "key": option.key,
+                    "area": option.area,
+                    "advanced": option.advanced,
+                    "type": node.get("type"),
+                    "enum": node.get("enum"),
+                    "items": (node.get("items") or {}).get("type"),
+                    "minimum": node.get("minimum"),
+                    "maximum": node.get("maximum"),
+                    "default": node.get("default"),
+                    "description": {
+                        language: option.description(language) for language in i18n.LANGUAGES
+                    },
+                    "value": effective(self.config.raw, option.path, node.get("default")),
+                    "origin": self.config.origins.get(option.key, "default"),
+                }
+            )
+        return {
+            "path": str(target),
+            "user": user,
+            "yaml": target.read_text(encoding="utf-8") if target.is_file() else "",
+            "options": options,
+        }
+
+    def config_check(self, body: dict[str, Any]) -> tuple[str, list[str]]:
+        if isinstance(body.get("yaml"), str):
+            text = str(body["yaml"])
+        elif isinstance(body.get("values"), dict):
+            text = yaml.safe_dump(body["values"], sort_keys=False, allow_unicode=True)
+        else:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "send yaml or values")
+        target = self.config.source or user_config_path()
+        try:
+            parse_yaml(text, str(target))
+            validate_text(text, str(target))
+        except ConfigError as error:
+            return text, list(error.problems)
+        return text, []
+
+    def config_validate(self, body: dict[str, Any]) -> dict[str, Any]:
+        text, problems = self.config_check(body)
+        return {"yaml": text, "problems": problems}
+
+    def config_save(self, body: dict[str, Any]) -> dict[str, Any]:
+        text, problems = self.config_check(body)
+        if problems:
+            raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "invalid configuration", problems)
+        target = self.config.source or user_config_path()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.is_file():
+            target.with_suffix(target.suffix + ".bak").write_text(
+                target.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+        target.write_text(text, encoding="utf-8")
+        config = load_config(target, repo=self.repo, environ=self.engine.environ)
+        self.config = config
+        self.engine.config = config
+        return {"saved": str(target), **self.config_view()}
+
     def save_routes(self, body: dict[str, Any]) -> dict[str, Any]:
         tiers = body.get("tiers")
         if not isinstance(tiers, dict):
@@ -254,6 +421,61 @@ class App:
         self.config = config
         self.engine.config = config
         return {"saved": str(target), "yaml": text}
+
+
+def effective(data: dict[str, Any], path: tuple[str, ...], fallback: Any) -> Any:
+    try:
+        return get_path(data, list(path))
+    except KeyError:
+        return fallback
+
+
+def install_view(spec: wizard.InstallSpec | None, component: wizard.Component) -> dict[str, Any]:
+    if spec is None:
+        return {"manager": None, "command": "", "manual": "", "from_ui": False, "size_mb": None}
+    command = " ".join(spec.argv) if spec.argv else spec.script
+    return {
+        "manager": spec.manager,
+        "command": command,
+        "manual": spec.manual,
+        "from_ui": bool(spec.argv) and not spec.elevated and spec.manager != "script",
+        "size_mb": component.size_mb,
+        "undo": " ".join(component.uninstall.get(spec.manager, ())),
+    }
+
+
+def captured_runner(lines: list[str]) -> wizard.Runner:
+    def run(argv: list[str]) -> int:
+        try:
+            launch = resolve_launch(argv)
+        except LaunchError:
+            return 127
+        result = subprocess.run(
+            launch,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=1800,
+            check=False,
+        )
+        lines.extend((result.stdout + result.stderr).splitlines()[-40:])
+        return result.returncode
+
+    return run
+
+
+def page_catalogs() -> str:
+    found = {
+        language: {
+            key.removeprefix("ui."): text
+            for key, text in i18n.catalog(language).items()
+            if key.startswith("ui.")
+        }
+        for language in i18n.LANGUAGES
+    }
+    return json.dumps(found, ensure_ascii=False).replace("<", "\\u003c")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -426,6 +648,8 @@ class Handler(BaseHTTPRequestHandler):
             .replace("{{NONCE}}", nonce)
             .replace("{{CSRF}}", self.app.csrf)
             .replace("{{VERSION}}", __version__)
+            .replace("{{SETTINGS}}", self.app.page_settings())
+            .replace("{{I18N}}", page_catalogs())
         )
         body = html.encode("utf-8")
         self.send_response(HTTPStatus.OK)
@@ -475,6 +699,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.OK, summary(app.config, app.engine.ledger))
             elif method == "GET" and parts == ["routes"]:
                 self.send_json(HTTPStatus.OK, app.routes())
+            elif method == "GET" and parts == ["setup"]:
+                self.send_json(HTTPStatus.OK, app.setup())
+            elif method == "POST" and parts == ["setup", "install"]:
+                self.send_json(HTTPStatus.OK, app.install(self.read_json()))
+            elif method == "GET" and parts == ["config"]:
+                self.send_json(HTTPStatus.OK, app.config_view())
+            elif method == "POST" and parts == ["config", "validate"]:
+                self.send_json(HTTPStatus.OK, app.config_validate(self.read_json()))
+            elif method == "PUT" and parts == ["config"]:
+                self.send_json(HTTPStatus.OK, app.config_save(self.read_json()))
             elif method == "PUT" and parts == ["routes"]:
                 self.send_json(HTTPStatus.OK, app.save_routes(self.read_json()))
             else:

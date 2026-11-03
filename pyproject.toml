@@ -79,7 +79,7 @@ ignore = ["S603", "S607", "S404", "S311", "E501"]
 [tool.mypy]
 strict = true
 python_version = "3.11"
-files = ["src/timonel"]
+files = ["src/timonel", "scripts"]
 
 [[tool.mypy.overrides]]
 module = ["winpty", "winpty.*", "keyring", "keyring.*"]

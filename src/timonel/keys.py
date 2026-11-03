@@ -50,3 +50,10 @@ def present(name: str) -> bool:
         return False
     except Exception:
         return False
+
+
+def backend_name() -> str | None:
+    try:
+        return type(backend().get_keyring()).__name__
+    except KeyringUnavailable:
+        return None

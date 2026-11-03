@@ -347,3 +347,72 @@ def test_negative_content_length_and_event_resume(app: App) -> None:
     body = stream.getresponse().read().decode()
     assert body.count("id: ") == 1
     assert "event: run.finished" in body
+
+
+def test_config_endpoints_validate_preview_and_save(app: App, home: Path) -> None:
+    client = Client(app)
+    status, view = client.json("GET", "/api/config")
+    assert status == 200
+    options = {item["key"]: item for item in view["options"]}  # type: ignore[index]
+    assert options["ui.density"]["value"] == "comfortable"
+    assert options["ui.density"]["origin"] == "default"
+    assert set(options["ui.density"]["description"]) == {"en", "es", "pt"}
+    status, checked = client.json(
+        "POST", "/api/config/validate", {"values": {"verification": {"timeout_s": -5}}}
+    )
+    assert status == 200
+    assert any("verification.timeout_s" in item for item in checked["problems"])  # type: ignore[index]
+    status, error = client.json("PUT", "/api/config", {"values": {"ui": {"density": "huge"}}})
+    assert status == 422
+    assert client.request("POST", "/api/config/validate", {"nothing": 1})[0] == 400
+    status, saved = client.json("PUT", "/api/config", {"values": {"ui": {"density": "compact"}}})
+    assert status == 200
+    assert "density: compact" in Path(saved["saved"]).read_text(encoding="utf-8")  # type: ignore[index]
+    assert app.engine.config.ui.density == "compact"
+    options = {item["key"]: item for item in saved["options"]}  # type: ignore[index]
+    assert options["ui.density"]["origin"] == "user"
+    status, saved = client.json("PUT", "/api/config", {"yaml": "ui:\n  theme: dark\n"})
+    assert status == 200
+    assert app.engine.config.ui.theme == "dark"
+    assert Path(saved["saved"] + ".bak").exists()  # type: ignore[index]
+
+
+def test_setup_endpoint_and_install_confirmation(app: App, monkeypatch: pytest.MonkeyPatch) -> None:
+    from timonel import wizard
+
+    client = Client(app)
+    status, data = client.json("GET", "/api/setup")
+    assert status == 200
+    items = {item["key"]: item for item in data["items"]}  # type: ignore[index]
+    assert items["claude"]["installed"] is True
+    assert items["deepseek"]["key_env"] == "DEEPSEEK_API_KEY"
+    assert client.json("POST", "/api/setup/install", {"key": "ghost"})[0] == 404
+    ran: list[list[str]] = []
+    monkeypatch.setattr(wizard, "detect_managers", lambda environ: ["npm"])
+    monkeypatch.setattr(wizard, "reachable", lambda host, environ: True)
+    monkeypatch.setattr(wizard, "refresh_windows_path", lambda environ: False)
+    import timonel.web.server as server
+
+    def fake_runner(lines: list[str]) -> object:
+        def run(argv: list[str]) -> int:
+            ran.append(argv)
+            lines.append("added 1 package")
+            return 0
+
+        return run
+
+    monkeypatch.setattr(server, "captured_runner", fake_runner)
+    status, preview = client.json("POST", "/api/setup/install", {"key": "gemini"})
+    assert preview["status"] == "confirm"  # type: ignore[index]
+    assert preview["command"].startswith("npm install -g")  # type: ignore[index]
+    assert ran == []
+    status, result = client.json("POST", "/api/setup/install", {"key": "gemini", "confirm": True})
+    assert ran and ran[0][:3] == ["npm", "install", "-g"]
+    assert "added 1 package" in result["lines"]  # type: ignore[index]
+    cursor = next(item for item in wizard.agent_components(app.config) if item.key == "cursor")
+    monkeypatch.setattr(wizard, "detect_managers", lambda environ: [])
+    status, terminal = client.json(
+        "POST", "/api/setup/install", {"key": cursor.key, "confirm": True}
+    )
+    assert terminal["status"] == "terminal"  # type: ignore[index]
+    assert len(ran) == 1

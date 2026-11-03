@@ -77,7 +77,7 @@ def shot(page: object, name: str) -> None:
         page.screenshot(path=str(Path(SHOTS) / f"{name}.png"), full_page=True)  # type: ignore[attr-defined]
 
 
-def open_ui(browser: object, app: App, **options: object) -> object:
+def open_ui(browser: object, app: App, tour: bool = False, **options: object) -> object:
     context = browser.new_context(
         viewport={"width": 1360, "height": 900}, device_scale_factor=2 if SHOTS else 1, **options
     )  # type: ignore[attr-defined]
@@ -88,6 +88,8 @@ def open_ui(browser: object, app: App, **options: object) -> object:
         "console", lambda message: errors.append(message.text) if message.type == "error" else None
     )
     page.errors = errors
+    if not tour:
+        page.add_init_script("localStorage.setItem('timonel.tour', 'done')")
     page.goto(f"http://127.0.0.1:{app.port}/?token={app.token}")
     return page
 
@@ -163,6 +165,8 @@ def test_spanish_dark_mobile_and_keyboard(ui: App, browser: object) -> None:
     expect(page.get_by_role("dialog")).to_contain_text("Atajos de teclado")  # type: ignore[attr-defined]
     page.keyboard.press("Escape")  # type: ignore[attr-defined]
     page.keyboard.press("l")  # type: ignore[attr-defined]
+    expect(page.get_by_role("heading", name="Gasto de hoje")).to_be_visible()  # type: ignore[attr-defined]
+    page.keyboard.press("l")  # type: ignore[attr-defined]
     expect(page.get_by_role("heading", name="Spend today")).to_be_visible()  # type: ignore[attr-defined]
     page.keyboard.press("Tab")  # type: ignore[attr-defined]
     focused = page.evaluate("document.activeElement.textContent")  # type: ignore[attr-defined]
@@ -181,3 +185,65 @@ def test_page_without_token_is_locked(ui: App, browser: object) -> None:
     assert response.status == 401
     status = page.evaluate("fetch('/api/state').then(r => r.status)")
     assert status == 401
+
+
+def test_guided_tour_on_first_visit(ui: App, browser: object) -> None:
+    page = open_ui(browser, ui, tour=True, locale="en-US")
+    expect = sync_api.expect
+    expect(page.get_by_role("dialog", name="1/5 · Panel")).to_be_visible()  # type: ignore[attr-defined]
+    dialog = page.locator("#tour")  # type: ignore[attr-defined]
+    expect(dialog).to_contain_text("Health of your agents")
+    shot(page, "tour")
+    for _ in range(4):
+        dialog.get_by_role("button", name="Next").click()
+    expect(page.get_by_role("dialog", name="5/5 · Settings")).to_be_visible()  # type: ignore[attr-defined]
+    page.get_by_role("button", name="Done").click()  # type: ignore[attr-defined]
+    expect(page.locator("#tour")).not_to_be_visible()  # type: ignore[attr-defined]
+    page.reload()  # type: ignore[attr-defined]
+    expect(page.get_by_role("heading", name="Panel")).to_be_visible()  # type: ignore[attr-defined]
+    expect(page.locator("#tour")).not_to_be_visible()  # type: ignore[attr-defined]
+    assert page.errors == []  # type: ignore[attr-defined]
+
+
+def test_setup_checklist_shows_commands_without_running_them(ui: App, browser: object) -> None:
+    page = open_ui(browser, ui, locale="en-US")
+    expect = sync_api.expect
+    page.keyboard.press("i")  # type: ignore[attr-defined]
+    expect(page.get_by_role("heading", name="Setup checklist")).to_be_visible()  # type: ignore[attr-defined]
+    expect(page.get_by_text("never asks for, sees or stores")).to_be_visible()  # type: ignore[attr-defined]
+    claude = page.locator('.setup-item[data-key="claude"]')  # type: ignore[attr-defined]
+    expect(claude).to_contain_text("ready")
+    deepseek = page.locator('.setup-item[data-key="deepseek"]')  # type: ignore[attr-defined]
+    deepseek.get_by_role("button", name="Add API key").click()
+    expect(deepseek.locator("code")).to_contain_text("timonel keys set DEEPSEEK_API_KEY")
+    shot(page, "setup")
+    assert page.errors == []  # type: ignore[attr-defined]
+
+
+def test_settings_form_validates_previews_and_saves(ui: App, browser: object) -> None:
+    page = open_ui(browser, ui, locale="en-US")
+    expect = sync_api.expect
+    page.keyboard.press("c")  # type: ignore[attr-defined]
+    expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()  # type: ignore[attr-defined]
+    page.get_by_label("Search options").fill("ui.density")  # type: ignore[attr-defined]
+    option = page.locator('.option[data-key="ui.density"]')  # type: ignore[attr-defined]
+    expect(option).to_be_visible()
+    option.locator("select").select_option("compact")
+    expect(option).to_contain_text("changed")
+    expect(page.locator("pre.console")).to_contain_text("density: compact")  # type: ignore[attr-defined]
+    expect(page.get_by_text("Valid", exact=True)).to_be_visible()  # type: ignore[attr-defined]
+    page.get_by_label("Search options").fill("verification.timeout")  # type: ignore[attr-defined]
+    page.get_by_label("Show advanced options").check()  # type: ignore[attr-defined]
+    timeout = page.locator('.option[data-key="verification.timeout_s"] input')  # type: ignore[attr-defined]
+    timeout.fill("-5")
+    timeout.dispatch_event("change")
+    expect(page.locator(".problems")).to_contain_text("verification.timeout_s")  # type: ignore[attr-defined]
+    page.locator('.option[data-key="verification.timeout_s"]').get_by_role(
+        "button", name="Back to default"
+    ).click()  # type: ignore[attr-defined]
+    expect(page.get_by_text("Valid", exact=True)).to_be_visible()  # type: ignore[attr-defined]
+    shot(page, "settings")
+    page.get_by_role("button", name="Validate and save").click()  # type: ignore[attr-defined]
+    expect(page.get_by_text("Saved:")).to_be_visible()  # type: ignore[attr-defined]
+    assert ui.engine.config.ui.density == "compact"
+    assert page.errors == []  # type: ignore[attr-defined]

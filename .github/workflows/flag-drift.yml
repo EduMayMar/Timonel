@@ -1,0 +1,55 @@
+name: flag-drift
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the public CLIs listed in the registry
+        run: |
+          python -m pip install pyyaml
+          python - <<'PY' > packages.txt
+          import pathlib, yaml
+          for path in sorted(pathlib.Path("src/timonel/agents").glob("*.yaml")):
+              drift = (yaml.safe_load(path.read_text()).get("install") or {}).get("drift") or {}
+              if drift.get("npm"):
+                  print("npm", drift["npm"])
+              if drift.get("pypi"):
+                  print("pypi", drift["pypi"])
+          PY
+          while read -r kind package; do
+            if [ "$kind" = npm ]; then npm install -g "$package" || echo "::warning::npm $package failed"; fi
+            if [ "$kind" = pypi ]; then pipx install "$package" || echo "::warning::pipx $package failed"; fi
+          done < packages.txt
+      - name: Compare connector flags with --help
+        id: check
+        continue-on-error: true
+        run: python scripts/flag_drift.py --markdown drift.md
+      - name: Open or update an issue
+        if: steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh issue list --label flag-drift --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file drift.md
+          else
+            gh label create flag-drift --color d93f0b --description "A connector flag no longer matches the CLI" || true
+            gh issue create --title "Connector flag drift detected" --label flag-drift --body-file drift.md
+          fi
