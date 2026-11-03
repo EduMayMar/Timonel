@@ -101,6 +101,7 @@ def build_env(
             )
         env[target] = secret
     env.setdefault("NO_COLOR", "1")
+    env.setdefault("PYTHONUTF8", "1")
     return env
 
 

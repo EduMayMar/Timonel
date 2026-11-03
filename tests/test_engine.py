@@ -722,6 +722,7 @@ def test_tampered_worktree_pointer_is_refused(fakes: Fakes, repo: Path) -> None:
     )
     worktree = Path(record["worktree"])
     (worktree / "evil").mkdir()
+    (worktree / ".git").unlink()
     (worktree / ".git").write_text(f"gitdir: {worktree / 'evil'}\n", encoding="utf-8")
     with pytest.raises(GitError, match="tampered"):
         gitops.git(worktree, "status")

@@ -16,8 +16,8 @@ from timonel.proc import (
     run_quick,
 )
 
-PY = sys.executable
-ENV = dict(os.environ)
+PY = getattr(sys, "_base_executable", sys.executable)
+ENV = {**os.environ, "PYTHONUTF8": "1"}
 
 
 def test_captures_stdout_stderr_and_exit_code(tmp_path: Path) -> None:

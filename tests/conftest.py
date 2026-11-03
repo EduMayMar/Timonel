@@ -16,11 +16,36 @@ AGENTS = ("claude", "codex", "copilot", "agy")
 WINDOWS = os.name == "nt"
 
 
+def windows_launcher() -> bytes:
+    import platform
+
+    import distlib
+
+    name = "t64-arm.exe" if platform.machine().lower() in ("arm64", "aarch64") else "t64.exe"
+    return (Path(distlib.__file__).parent / name).read_bytes()
+
+
+def write_windows_exe(bin_dir: Path, name: str) -> None:
+    import io
+    import zipfile
+
+    script = (
+        "import runpy, sys\n"
+        f"sys.argv[1:1] = [{name!r}]\n"
+        f"runpy.run_path({str(FAKE)!r}, run_name='__main__')\n"
+    )
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("__main__.py", script)
+    executable = sys.executable
+    interpreter = f'"{executable}"' if " " in executable else executable
+    shebang = f"#!{interpreter}\n".encode()
+    (bin_dir / f"{name}.exe").write_bytes(windows_launcher() + shebang + archive.getvalue())
+
+
 def write_shim(bin_dir: Path, name: str) -> None:
     if WINDOWS:
-        (bin_dir / f"{name}.cmd").write_text(
-            f'@"{sys.executable}" "{FAKE}" {name} %*\r\n', encoding="utf-8"
-        )
+        write_windows_exe(bin_dir, name)
         return
     shim = bin_dir / name
     shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE}" {name} "$@"\n', encoding="utf-8")
@@ -74,6 +99,7 @@ def fakes(tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch) -> Fakes:
     env["DEEPSEEK_API_KEY"] = "sk-deepseek-secret-value-123456"
     env["GH_TOKEN"] = "ghp_faketokenfaketokenfaketoken1234"
     env["TIMONEL_HOME"] = str(home)
+    env["PYTHONUTF8"] = "1"
     return Fakes(bin_dir=bin_dir, state=state, env=env)
 
 
@@ -88,10 +114,7 @@ adaptive:
 
 
 def make_config(extra: str = "") -> Config:
-    text = TEST_ROUTES + extra
-    if WINDOWS:
-        text += "\nagents:\n  copilot:\n    prompt_via: stdin\n    prompt_args: []\n"
-    return validate_text(text)
+    return validate_text(TEST_ROUTES + extra)
 
 
 @pytest.fixture
