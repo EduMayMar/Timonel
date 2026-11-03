@@ -68,9 +68,11 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "S", "RUF", "PTH", "C4", "PIE", 
 ignore = ["S603", "S607", "S404", "S311", "E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S108", "PTH", "RUF012", "RUF043"]
+"tests/**" = ["S101", "S105", "S106", "S108", "PTH", "RUF012", "RUF043", "RUF059"]
 "src/timonel/providers.py" = ["S310"]
 "src/timonel/notify.py" = ["S310"]
+"src/timonel/wizard.py" = ["S310"]
+"src/timonel/commands.py" = ["S310"]
 "src/timonel/ledger.py" = ["S608"]
 "src/timonel/config.py" = ["S105"]
 

@@ -4,7 +4,7 @@ import importlib.util
 import os
 import re
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -197,14 +197,31 @@ def inspect_agent(
     )
 
 
+def default_names(config: Config) -> set[str]:
+    ladders = [
+        *config.classifier.ladder,
+        *config.planner.ladder,
+        *config.review.reviewers,
+        *(rung for rungs in config.tiers.values() for rung in rungs),
+    ]
+    used = {rung.agent for rung in ladders}
+    return {
+        name
+        for name, agent in config.agents.items()
+        if agent.enabled and (agent.kind == "agent" or name in used)
+    }
+
+
 def diagnose(
     config: Config,
     *,
     smoke: bool = False,
     models: bool = True,
     environ: Mapping[str, str] | None = None,
+    names: Collection[str] | None = None,
 ) -> list[AgentHealth]:
-    agents = list(config.agents.values())
+    wanted = set(names) if names is not None else default_names(config)
+    agents = [agent for name, agent in config.agents.items() if name in wanted]
     with ThreadPoolExecutor(max_workers=max(1, len(agents))) as pool:
         return list(
             pool.map(

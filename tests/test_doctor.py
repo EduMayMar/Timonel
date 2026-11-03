@@ -19,7 +19,9 @@ def test_doctor_detects_fakes(fakes: Fakes) -> None:
     assert report["agy"].models == ("fake-pro", "fake-flash")
     assert report["claude"].models == ("fable", "opus", "sonnet")
     assert all(report[name].usable for name in ("claude", "codex", "copilot", "agy", "deepseek"))
-    assert not report["gemini"].installed
+    assert "gemini" not in report
+    full = by_name(diagnose(config, environ=fakes.env, names=config.agents))
+    assert not full["gemini"].installed
 
 
 def test_doctor_reports_missing_and_unauthenticated(fakes: Fakes) -> None:

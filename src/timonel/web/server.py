@@ -23,7 +23,7 @@ from timonel.config import TIERS, Config, ConfigError, user_config_path, validat
 from timonel.doctor import AgentHealth, diagnose
 from timonel.engine import Engine, RunError, RunOptions
 from timonel.gitops import GitError
-from timonel.ledger import Ledger
+from timonel.ledger import Ledger, open_ledger
 from timonel.router import Plan, RoutingError, Step, parse_force
 from timonel.stats import spend_since, start_of_day, summary
 
@@ -549,7 +549,7 @@ def serve(
         root = gitops.repo_root(repo or Path.cwd())
     except GitError:
         root = (repo or Path.cwd()).resolve()
-    app = App(config, Ledger(), root)
+    app = App(config, open_ledger(config.paths.ledger), root)
     server = make_server(app, port)
     url = f"http://127.0.0.1:{app.port}/?token={app.token}"
     print(f"Timonel UI for {root}\n  {url}\nPress Ctrl+C to stop.", flush=True)

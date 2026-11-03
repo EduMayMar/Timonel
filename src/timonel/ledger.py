@@ -105,6 +105,8 @@ MAX_OUTPUT = 200_000
 
 
 def data_dir() -> Path:
+    if explicit := os.environ.get("TIMONEL_DATA_DIR"):
+        return Path(explicit)
     if override := os.environ.get("TIMONEL_HOME"):
         return Path(override)
     if os.name == "nt":
@@ -309,6 +311,22 @@ class Ledger:
             for row in rows
         ]
 
+    def purge(self, cutoff: float) -> int:
+        with self.transaction() as db:
+            ids = [
+                row[0]
+                for row in db.execute("SELECT id FROM runs WHERE created < ?", (cutoff,)).fetchall()
+            ]
+            for run_id in ids:
+                db.execute("DELETE FROM attempts WHERE run_id = ?", (run_id,))
+                db.execute("DELETE FROM events WHERE run_id = ?", (run_id,))
+                db.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+            db.execute("DELETE FROM attempts WHERE run_id LIKE 'plan-%' AND started < ?", (cutoff,))
+            db.execute("DELETE FROM events WHERE run_id LIKE 'plan-%' AND ts < ?", (cutoff,))
+        with self.lock:
+            self.connection.execute("VACUUM")
+        return len(ids)
+
     def set_cooldown(self, agent: str, until: float, reason: str) -> None:
         with self.transaction() as db:
             db.execute(
@@ -366,3 +384,7 @@ def decode_run(row: sqlite3.Row) -> dict[str, Any]:
             run[key] = json.loads(run[key])
     run["write"] = bool(run["write"])
     return run
+
+
+def open_ledger(path: str = "") -> Ledger:
+    return Ledger(Path(path).expanduser() if path else None)

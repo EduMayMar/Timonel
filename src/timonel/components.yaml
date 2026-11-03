@@ -1,0 +1,76 @@
+git:
+  command: git
+  title: Git
+  homepage: https://git-scm.com
+  install:
+    winget: {argv: [winget, install, --id, Git.Git, -e, --source, winget], verified: "git-scm.com/install/windows"}
+    scoop: {argv: [scoop, install, git], verified: ""}
+    choco: {argv: [choco, install, git, -y], verified: ""}
+    brew: {argv: [brew, install, git], verified: ""}
+    apt: {argv: [sudo, apt-get, install, -y, git], verified: ""}
+    dnf: {argv: [sudo, dnf, install, -y, git], verified: ""}
+    pacman: {argv: [sudo, pacman, -S, --needed, git], verified: ""}
+  uninstall:
+    winget: [winget, uninstall, --id, Git.Git, -e]
+    scoop: [scoop, uninstall, git]
+    choco: [choco, uninstall, git]
+    brew: [brew, uninstall, git]
+    apt: [sudo, apt-get, remove, git]
+    dnf: [sudo, dnf, remove, git]
+    pacman: [sudo, pacman, -R, git]
+gh:
+  command: gh
+  title: GitHub CLI
+  homepage: https://cli.github.com
+  optional: true
+  login: {argv: [gh, auth, login], flow: browser}
+  install:
+    winget: {argv: [winget, install, --id, GitHub.cli, --source, winget], verified: "github.com/cli/cli docs/install_windows.md"}
+    scoop: {argv: [scoop, install, gh], verified: "github.com/cli/cli docs/install_windows.md"}
+    choco: {argv: [choco, install, gh], verified: "github.com/cli/cli docs/install_windows.md"}
+    brew: {argv: [brew, install, gh], verified: ""}
+    dnf: {argv: [sudo, dnf, install, gh], verified: "github.com/cli/cli docs/install_linux.md (community package)"}
+    pacman: {argv: [sudo, pacman, -S, github-cli], verified: "github.com/cli/cli docs/install_linux.md (community package)"}
+    apt: {manual: "https://github.com/cli/cli/blob/trunk/docs/install_linux.md", verified: "github.com/cli/cli docs/install_linux.md"}
+  uninstall:
+    winget: [winget, uninstall, --id, GitHub.cli]
+    scoop: [scoop, uninstall, gh]
+    choco: [choco, uninstall, gh]
+    brew: [brew, uninstall, gh]
+    dnf: [sudo, dnf, remove, gh]
+    pacman: [sudo, pacman, -R, github-cli]
+node:
+  command: npm
+  title: Node.js and npm
+  homepage: https://nodejs.org
+  install:
+    winget: {argv: [winget, install, --id, OpenJS.NodeJS.LTS, -e, --source, winget], verified: ""}
+    scoop: {argv: [scoop, install, nodejs-lts], verified: ""}
+    choco: {argv: [choco, install, nodejs-lts, -y], verified: ""}
+    brew: {argv: [brew, install, node], verified: ""}
+    apt: {argv: [sudo, apt-get, install, -y, nodejs, npm], verified: ""}
+    dnf: {argv: [sudo, dnf, install, -y, nodejs], verified: ""}
+    pacman: {argv: [sudo, pacman, -S, --needed, nodejs, npm], verified: ""}
+  uninstall:
+    winget: [winget, uninstall, --id, OpenJS.NodeJS.LTS, -e]
+    scoop: [scoop, uninstall, nodejs-lts]
+    choco: [choco, uninstall, nodejs-lts]
+    brew: [brew, uninstall, node]
+    apt: [sudo, apt-get, remove, nodejs, npm]
+    dnf: [sudo, dnf, remove, nodejs]
+    pacman: [sudo, pacman, -R, nodejs, npm]
+pipx:
+  command: pipx
+  title: pipx
+  homepage: https://pipx.pypa.io
+  optional: true
+  install:
+    winget: {argv: [python, -m, pip, install, --user, pipx], verified: ""}
+    scoop: {argv: [scoop, install, pipx], verified: ""}
+    brew: {argv: [brew, install, pipx], verified: ""}
+    apt: {argv: [sudo, apt-get, install, -y, pipx], verified: ""}
+    dnf: {argv: [sudo, dnf, install, -y, pipx], verified: ""}
+    pacman: {argv: [sudo, pacman, -S, --needed, python-pipx], verified: ""}
+  uninstall:
+    scoop: [scoop, uninstall, pipx]
+    brew: [brew, uninstall, pipx]

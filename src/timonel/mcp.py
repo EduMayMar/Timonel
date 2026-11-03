@@ -10,7 +10,7 @@ from timonel import __version__, gitops
 from timonel.config import Config
 from timonel.engine import Engine, RunError, RunOptions
 from timonel.gitops import GitError
-from timonel.ledger import Ledger
+from timonel.ledger import Ledger, open_ledger
 from timonel.router import RoutingError, parse_force
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
@@ -63,7 +63,7 @@ class McpServer:
     def __init__(
         self, config: Config, ledger: Ledger | None = None, cwd: Path | None = None
     ) -> None:
-        self.engine = Engine(config, ledger or Ledger())
+        self.engine = Engine(config, ledger or open_ledger(config.paths.ledger))
         self.cwd = cwd or Path.cwd()
         try:
             self.root: Path | None = gitops.repo_root(self.cwd)
