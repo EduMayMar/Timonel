@@ -16,7 +16,7 @@ Generated from `src/timonel/agents/*.yaml` by `scripts/gen_docs.py`; do not edit
 | `copilot` | agent | GitHub Copilot CLI | GitHub | verified | 1.0.105 | 2026-11-03 | yes | `npm install -g @github/copilot` |
 | `crush` | agent | Crush | Charm | verified | 0.99.0 | 2026-11-03 | no | `npm install -g @charmland/crush` |
 | `cursor` | agent | Cursor CLI | Anysphere | docs | — | 2026-11-03 | no | `brew install --cask cursor-cli` |
-| `deepseek-api` | provider | DeepSeek API | DeepSeek API | unverified | — | 2026-11-03 | yes | `—` |
+| `deepseek-api` | provider | DeepSeek API | DeepSeek | unverified | — | 2026-11-03 | yes | `—` |
 | `deepseek` | agent | DeepSeek through Claude Code | DeepSeek | docs | 2.1.317 | 2026-11-03 | yes | `npm install -g @anthropic-ai/claude-code` |
 | `droid` | agent | Factory Droid | Factory | verified | 1.2.0 | 2026-11-03 | no | `npm install -g @factory/cli` |
 | `fireworks` | provider | Fireworks AI | Fireworks AI | unverified | — | 2026-11-03 | yes | `—` |

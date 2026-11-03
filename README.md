@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Send each coding task to the right agent and model. Escalate only when it fails.</b><br>
-  Claude Code · Codex CLI · GitHub Copilot CLI · Google Antigravity · DeepSeek
+  Claude Code · Codex · GitHub Copilot · Gemini CLI · Qwen Code · OpenCode · Aider · and more
 </p>
 
 <p align="center">
@@ -29,35 +29,41 @@ of agents and models, runs the cheapest suitable one in an isolated git worktree
 with your tests and, if they fail, escalates to a stronger model with the error as context. Nothing
 touches your branch until you apply it.
 
-- **One command for every CLI agent you already pay for.** Subscriptions are tried before
-  pay-per-use APIs at the same level.
+- **One command for every CLI agent you already pay for.** 16 agent connectors and 11 model APIs,
+  each with the date and version its flags were checked. Subscriptions are tried before pay-per-use
+  APIs at the same level.
+- **Made for beginners too.** `timonel start` installs and explains each piece, `timonel demo` shows
+  the whole flow with simulated agents, `timonel learn` explains the concepts, and every error has a
+  `TMN-xxxx` code with the fix.
+- **Private and safe by default.** Timonel never asks for, sees or stores your account passwords or
+  tokens; API keys go to the system keyring. No telemetry. Edits happen in worktrees, no shell,
+  secrets are scoped to one process and redacted everywhere else.
 - **Explains every decision.** `timonel plan` shows the classification, the route and why, without
-  running anything.
-- **Safe by default.** Read-only for explain/review tasks, worktrees for edits, no shell, secrets
-  scoped to the one process that needs them and redacted everywhere else.
-- **Declarative adapters.** Every flag lives in `routes.yaml`. When a CLI changes, you fix YAML, not
-  code.
-- **Learns from your ledger.** Success, cost and latency per task kind, tier and agent reorder the
-  ladder, with the numbers behind each choice.
-- **Local web UI.** Live timeline, diffs, one-click apply, statistics and a drag-and-drop route
-  editor. English and Spanish, light and dark.
+  running anything; `--explain` works on any command.
+- **Everything is configurable.** One JSON Schema drives validation, `timonel config`, the docs and
+  the settings page. Layers: defaults, user, trusted project, environment, `--set`.
+- **Local web UI.** Guided tour, setup checklist, settings built from the schema, live timeline,
+  diffs, one-click apply, statistics and a route editor. English, Spanish and Portuguese, light and
+  dark, keyboard and screen-reader friendly.
 
 ## Quick start (60 seconds)
 
 ```bash
-uv tool install git+https://github.com/EduMayMar/Timonel   # or: pipx install git+https://github.com/EduMayMar/Timonel
-timonel doctor            # which agents are installed and logged in
-timonel init              # write routes.yaml with the agents you have
+pipx install git+https://github.com/EduMayMar/Timonel   # or: uv tool install git+https://github.com/EduMayMar/Timonel
+timonel demo              # see the whole flow with simulated agents, nothing installed
+timonel start             # guided setup: Git, Node.js and the agents you choose, explained step by step
 cd path/to/your/repo
 timonel plan "Fix the crash when config.yaml is empty"
-timonel run "Fix the crash when config.yaml is empty" --verify "python -m pytest -q"
+timonel run "Fix the crash when config.yaml is empty"
 timonel diff <id>         # review
 timonel apply <id>        # merge branch timonel/<id> into your branch
 timonel ui                # or do it all in the browser
 ```
 
-You need at least one agent CLI installed and logged in: `claude`, `codex`, `copilot` or `agy`. For
-DeepSeek, set `DEEPSEEK_API_KEY` and have `claude` installed.
+Installers that show what they will do before doing it: [`install/install.sh`](install/install.sh)
+and [`install/install.ps1`](install/install.ps1). Single-file binaries for Windows, macOS and Linux,
+and a container image, are attached to each release. Step-by-step guides for
+[Windows](docs/install/windows.md), [macOS](docs/install/macos.md) and [Linux](docs/install/linux.md).
 
 ## How it works
 
@@ -100,16 +106,19 @@ Read more in [docs/concepts.md](docs/concepts.md).
 
 ## Agents
 
-| Agent | How it is called | Flags | Billing default |
-|---|---|---|---|
-| Claude Code | `claude -p`, JSON output, prompt on stdin | verified with `--help` of 2.1.317 | subscription |
-| Codex CLI | `codex exec --json`, prompt on stdin | verified with `--help` of 0.166.0 (effort key unverified) | subscription |
-| GitHub Copilot CLI | `copilot -p --silent --allow-all-tools --deny-tool=shell` | verified with `--help` of 1.0.105 | subscription |
-| Google Antigravity | `agy -p` inside a pseudo-terminal | **unverified** (from public issues and cheat sheets) | subscription |
-| DeepSeek | Claude Code with `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic` | Claude flags verified, endpoint unverified | api |
+Agents (coding CLIs that edit files in a worktree): Claude Code, Codex CLI, GitHub Copilot CLI,
+Gemini CLI, Qwen Code, OpenCode, Amp, Crush, Cline, Factory Droid, Kimi Code, Aider and DeepSeek
+through Claude Code have flags verified against their own `--help`; Cursor CLI is documented only;
+Google Antigravity and Goose are community entries, not verified.
 
-Run `timonel doctor --smoke` on your machine: it sends one tiny read-only prompt to each agent and
-tells you whether the flags work. Details and sources in [docs/agents.md](docs/agents.md).
+Providers (HTTP model APIs used to classify, plan and review, never to edit): OpenAI, Anthropic,
+Gemini API, OpenRouter, Ollama, LM Studio, Groq, Mistral, Together, Fireworks and the DeepSeek API.
+
+New connectors start disabled: `timonel agents list`, `timonel agents enable <name>`,
+`timonel agents test <name>`. The full table with versions and check dates is
+[docs/connectors.md](docs/connectors.md); adding one is a YAML file
+([docs/adding-an-agent.md](docs/adding-an-agent.md)). A nightly workflow re-reads each CLI's `--help`
+and opens an issue when a flag disappears.
 
 ## Profiles
 
@@ -119,23 +128,26 @@ tells you whether the flags work. Details and sources in [docs/agents.md](docs/a
 | `balanced` (default) | complexity | 2 more tiers | Everyday work |
 | `max` | tier 4 | tier 4 | When it has to be right the first time |
 
-Profiles are plain data in `routes.yaml`; add your own.
+Profiles are plain configuration data; add your own with `timonel profiles create`.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `timonel doctor [--smoke] [--json]` | Installed agents, versions, login, models; `--smoke` validates flags with a real prompt |
-| `timonel models [agent]` | Models per agent (`agy models` and each CLI's known aliases) |
-| `timonel plan "task"` | Classification, route and reasons, without running (`--model-classify` asks the classifier model) |
-| `timonel run "task"` | Run with `--profile`, `--force agent[:model]`, `--verify CMD` (repeatable), `--race`, `--decompose` |
-| `timonel status [id]` · `diff id` | Runs, attempts, costs, diff |
-| `timonel apply id` · `discard id` | Merge or delete a run's branch and worktree |
-| `timonel resume id` | Continue an interrupted run |
+| `timonel start [--dry-run] [--agents a,b]` | Guided installation and login check, step by step |
+| `timonel demo` · `learn [topic]` | Simulated end-to-end run · plain-language explanations |
+| `timonel doctor [--smoke] [--fix]` | Installed agents, versions, login, models; `--fix` offers the fix for each problem |
+| `timonel plan "task"` | Classification, route and reasons, without running |
+| `timonel run "task"` | Run with `--profile`, `--force agent[:model]`, `--verify CMD`, `--race`, `--decompose` |
+| `timonel status [id]` · `diff id` · `apply id` · `discard id` · `resume id` | Follow, review, keep or drop a run |
 | `timonel stats` | Success, cost and latency by agent, tier and task kind; savings vs. always using the top tier |
-| `timonel init` · `validate` | Generate or check `routes.yaml` |
-| `timonel ui` | Local web interface |
-| `timonel mcp` | MCP server over stdio with `timonel_plan`, `timonel_run`, `timonel_status` |
+| `timonel agents list\|info\|enable\|disable\|test\|add\|remove` | Manage connectors |
+| `timonel config list\|get\|set\|unset\|explain\|edit\|validate\|export\|import\|reset\|schema` | Every option, with its layer and meaning |
+| `timonel profiles` · `mode simple\|expert` · `trust` · `keys` · `purge` | Profiles, progressive disclosure, project trust, keyring, retention |
+| `timonel ui` · `mcp` | Local web interface · MCP server over stdio |
+
+Add `--explain` to any command to see what it will do, `--lang es|en|pt` to change the language and
+`--set key=value` to override one option.
 
 ### Use Timonel from another agent (MCP)
 
@@ -153,42 +165,39 @@ started; merging stays a human decision.
 checks `Host`, state changes require same `Origin` plus a CSRF token, and a nonce-based CSP blocks
 injected scripts.
 
-| Panel | Live run |
+| Guided tour | Setup checklist |
 |---|---|
-| ![Panel with agent health and today's spend](docs/screenshots/panel.png) | ![Run view with timeline, live output and diff](docs/screenshots/run.png) |
-| **Statistics** | **Routes editor** |
-| ![Success rate, cost and latency by agent](docs/screenshots/stats.png) | ![Drag-and-drop ladders per tier](docs/screenshots/routes.png) |
-| **History** | **Spanish, dark mode** |
-| ![History with filters](docs/screenshots/history.png) | ![Panel in Spanish and dark mode](docs/screenshots/panel-dark-es.png) |
+| ![Guided tour on first visit](docs/screenshots/tour.png) | ![Setup checklist with commands for each missing step](docs/screenshots/setup.png) |
+| **Settings from the schema** | **Live run** |
+| ![Settings page with search, badges and YAML preview](docs/screenshots/settings.png) | ![Run view with timeline, live output and diff](docs/screenshots/run.png) |
+| **Panel** | **Routes editor** |
+| ![Panel with agent health and today's spend](docs/screenshots/panel.png) | ![Drag-and-drop ladders per tier](docs/screenshots/routes.png) |
 
-Keyboard: `p` panel, `n` new task, `h` history, `s` statistics, `r` routes, `t` theme, `l` language,
-`?` help, `Ctrl+Enter` preview/launch. The screenshots were taken by the Playwright test suite against
-fake agents.
+Keyboard: `p` panel, `n` new task, `h` history, `s` statistics, `r` routes, `i` setup, `c` settings,
+`t` theme, `l` language, `?` help (all configurable under `ui.shortcuts`). The screenshots were taken
+by the Playwright test suite against fake agents.
 
 ## Configuration
 
-Your `routes.yaml` lives in `~/.config/timonel/` (Linux, macOS) or `%APPDATA%\timonel\` (Windows) and
-is merged over the [built-in defaults](src/timonel/default_routes.yaml). It is never read from the
-repository being changed. Full reference: [docs/routes-reference.md](docs/routes-reference.md).
+Values come from built-in defaults, then your user file (`~/.config/timonel/routes.yaml` or
+`%APPDATA%\timonel\routes.yaml`), then a repository's `.timonel.yaml` **only after `timonel trust`**,
+then `TIMONEL_SECTION__KEY` environment variables, then `--set key=value`.
 
-```yaml
-execution:
-  verify:
-    - ["python", "-m", "pytest", "-q"]
-agents:
-  codex:
-    billing: api
-  claude:
-    cost_per_attempt_usd: 0.05
+```bash
+timonel config explain review.enabled      # meaning, default, value and which layer set it
+timonel config set verification.commands '[["python", "-m", "pytest", "-q"]]'
 ```
 
-Keys go in environment variables (`DEEPSEEK_API_KEY`, `GH_TOKEN`...) or in the OS keyring under the
-service `timonel` (`pip install "timonel[keyring]"`), never in files.
+Guides: [configuration](docs/configuration.md), [recipes](docs/recipes.md) (spend the minimum,
+maximum quality, only Copilot) and the generated reference in
+[English](docs/reference/configuration.md), [Spanish](docs/reference/configuration.es.md) and
+[Portuguese](docs/reference/configuration.pt.md). API keys go to the system keyring with
+`timonel keys set NAME` (`pip install "timonel[keyring]"`) or environment variables, never in files.
 
 ## FAQ
 
-**Does Timonel call any model API itself?** No. It only runs the CLIs you installed, with their own
-logins.
+**Does Timonel call any model API itself?** Only providers you configure (for example to classify
+or review). Otherwise it runs the CLIs you installed, with their own logins. It sends no telemetry.
 
 **Will it touch my working copy?** Not until you run `timonel apply`. Edits happen in a worktree under
 Timonel's data directory.
@@ -240,7 +249,7 @@ to emit UTF-8.
 Claude Code or remove the flag from `agents.claude.base_args`.
 
 **An agent is skipped with "cooling down".** It hit a usage limit and rests for
-`execution.cooldown_minutes` (30 by default). The UI panel marks it; lower the value in `routes.yaml`
+`escalation.cooldown_minutes` (30 by default). The UI panel marks it; lower the value with `timonel config set`
 if your plan resets sooner.
 
 **`apply` says the repository has uncommitted changes.** Commit or stash first; Timonel never merges

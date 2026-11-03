@@ -88,4 +88,4 @@ worktrees; there is no apply tool, so merging always needs a human. Errors are r
 
 ## Reporting
 
-See [SECURITY.md](../SECURITY.md).
+See [SECURITY.md](https://github.com/EduMayMar/Timonel/blob/main/SECURITY.md).

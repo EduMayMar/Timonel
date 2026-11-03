@@ -32,9 +32,19 @@ The browser tests need Chromium: `uv run playwright install chromium`.
 
 ## Adding or fixing an agent
 
-Most fixes are a change in `src/timonel/default_routes.yaml`. Read
+Each connector is one file in `src/timonel/agents/`. Read
 [docs/adding-an-agent.md](docs/adding-an-agent.md). If you could only verify a flag from third-party
-sources, leave `verified: false`.
+sources, set `verification.status: unverified`. After changing the schema or the registry, run
+`python scripts/gen_docs.py`.
+
+## Translations
+
+See [docs/translating.md](docs/translating.md). Issues labelled `good first issue` and `i18n` are good
+places to start.
+
+## Releases
+
+See [docs/versioning.md](docs/versioning.md).
 
 ## Commits and pull requests
 

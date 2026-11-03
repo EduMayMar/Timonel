@@ -207,7 +207,7 @@ def agent_components(config: Config) -> list[Component]:
                 key_env=str(api_key.get("env", "")),
                 key_url=str(api_key.get("url", meta.get("homepage", ""))),
                 what=t(
-                    "agent.what",
+                    "provider.what" if agent.kind == "provider" else "agent.what",
                     title=meta.get("title", name),
                     vendor=meta.get("vendor", "?"),
                     status=t(f"agent.status.{status}"),

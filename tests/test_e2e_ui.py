@@ -214,8 +214,13 @@ def test_setup_checklist_shows_commands_without_running_them(ui: App, browser: o
     claude = page.locator('.setup-item[data-key="claude"]')  # type: ignore[attr-defined]
     expect(claude).to_contain_text("ready")
     deepseek = page.locator('.setup-item[data-key="deepseek"]')  # type: ignore[attr-defined]
-    deepseek.get_by_role("button", name="Add API key").click()
-    expect(deepseek.locator("code")).to_contain_text("timonel keys set DEEPSEEK_API_KEY")
+    expect(deepseek.get_by_role("button", name="Add API key")).to_have_count(0)
+    openai = page.locator('.setup-item[data-key="openai"]')  # type: ignore[attr-defined]
+    openai.get_by_role("button", name="Add API key").click()
+    expect(openai.locator("code")).to_contain_text("timonel keys set OPENAI_API_KEY")
+    expect(page.locator('.setup-item[data-key="ollama"]')).to_contain_text("ready")  # type: ignore[attr-defined]
+    expect(page.locator('.setup-item[data-key="openai"]')).to_contain_text("needs API key")  # type: ignore[attr-defined]
+    expect(page.locator('.setup-item[data-key="openai"]')).to_contain_text("never to edit files")  # type: ignore[attr-defined]
     shot(page, "setup")
     assert page.errors == []  # type: ignore[attr-defined]
 
@@ -242,8 +247,49 @@ def test_settings_form_validates_previews_and_saves(ui: App, browser: object) ->
         "button", name="Back to default"
     ).click()  # type: ignore[attr-defined]
     expect(page.get_by_text("Valid", exact=True)).to_be_visible()  # type: ignore[attr-defined]
+    expect(page.locator("pre.console")).not_to_contain_text("verification")  # type: ignore[attr-defined]
     shot(page, "settings")
     page.get_by_role("button", name="Validate and save").click()  # type: ignore[attr-defined]
     expect(page.get_by_text("Saved:")).to_be_visible()  # type: ignore[attr-defined]
     assert ui.engine.config.ui.density == "compact"
+    assert page.errors == []  # type: ignore[attr-defined]
+
+
+AUDIT = """() => {
+  const problems = [];
+  const name = (node) => (node.getAttribute("aria-label") || node.getAttribute("aria-labelledby")
+    || (node.id && document.querySelector(`label[for="${node.id}"]`)?.textContent)
+    || node.closest("label")?.textContent || node.textContent || node.getAttribute("title") || "").trim();
+  for (const node of document.querySelectorAll("button, a[href], input, select, textarea")) {
+    if (node.closest("[hidden], dialog:not([open])")) continue;
+    if (node.type === "hidden") continue;
+    if (!name(node) && !node.getAttribute("placeholder")) problems.push(`no name: ${node.outerHTML.slice(0, 80)}`);
+  }
+  for (const node of document.querySelectorAll("img")) if (!node.hasAttribute("alt")) problems.push("img without alt");
+  let last = 0;
+  for (const node of document.querySelectorAll("main h1, main h2, main h3")) {
+    const level = Number(node.tagName[1]);
+    if (level > last + 1) problems.push(`heading jump to ${node.tagName}: ${node.textContent}`);
+    last = level;
+  }
+  const ids = [...document.querySelectorAll("[id]")].map((node) => node.id);
+  for (const id of new Set(ids)) if (ids.filter((other) => other === id).length > 1) problems.push(`duplicate id ${id}`);
+  if (!document.documentElement.lang) problems.push("no lang");
+  return problems;
+}"""
+
+
+@pytest.mark.parametrize("language", ["en-US", "es-ES"])
+def test_every_view_passes_the_accessibility_checks(
+    ui: App, browser: object, language: str
+) -> None:
+    page = open_ui(browser, ui, locale=language)
+    for view in ("panel", "new", "history", "stats", "routes", "setup", "settings"):
+        page.goto(f"http://127.0.0.1:{ui.port}/#/{view}")  # type: ignore[attr-defined]
+        page.wait_for_selector("main h1:not(:text('Loading…')):not(:text('Cargando…'))")  # type: ignore[attr-defined]
+        page.wait_for_load_state("networkidle")  # type: ignore[attr-defined]
+        assert page.evaluate(AUDIT) == [], view  # type: ignore[attr-defined]
+    page.reload()  # type: ignore[attr-defined]
+    page.keyboard.press("Tab")  # type: ignore[attr-defined]
+    assert page.evaluate("document.activeElement.classList.contains('skip')")  # type: ignore[attr-defined]
     assert page.errors == []  # type: ignore[attr-defined]

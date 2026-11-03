@@ -1,7 +1,7 @@
 # Supported agents and what was verified
 
 Timonel never guesses flags in code: every flag lives in
-[`default_routes.yaml`](../src/timonel/default_routes.yaml) and you can override any of them in your
+[`default_routes.yaml`](https://github.com/EduMayMar/Timonel/blob/main/src/timonel/default_routes.yaml) and you can override any of them in your
 own `routes.yaml`. This page records where each default comes from.
 
 **Verified** means the flag appears in the `--help` output of the version listed, read on

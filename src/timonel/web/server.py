@@ -256,12 +256,12 @@ class App:
                     "what": component.what,
                     "enabled": enabled,
                     "installed": present,
-                    "auth": wizard.auth_state(component, self.config, environ)
-                    if present and enabled and agent is not None
-                    else None,
+                    "auth": auth_view(component, agent, present, enabled, self.config, environ),
                     "install": install_view(spec, component),
                     "login": " ".join(component.login),
                     "key_env": component.key_env,
+                    "key_present": bool(component.key_env)
+                    and bool(environ.get(component.key_env) or keys.present(component.key_env)),
                     "homepage": component.homepage,
                 }
             )
@@ -421,6 +421,23 @@ class App:
         self.config = config
         self.engine.config = config
         return {"saved": str(target), "yaml": text}
+
+
+def auth_view(
+    component: wizard.Component,
+    agent: Any,
+    present: bool,
+    enabled: bool,
+    config: Config,
+    environ: dict[str, str],
+) -> str | None:
+    if agent is None or not present or not enabled:
+        return None
+    if component.kind == "provider":
+        if not component.key_env:
+            return "ok"
+        return "ok" if environ.get(component.key_env) or keys.present(component.key_env) else "key"
+    return wizard.auth_state(component, config, environ)
 
 
 def effective(data: dict[str, Any], path: tuple[str, ...], fallback: Any) -> Any:

@@ -55,13 +55,14 @@ nav a:hover { background: var(--paper-2); color: var(--ink); }
 nav a[aria-current="page"] { background: var(--ink); color: var(--paper); }
 nav kbd { font: .72rem var(--mono); opacity: .7; }
 .rail-foot { overflow-wrap: anywhere; margin-top: auto; display: grid; gap: var(--s2); font-size: .85rem; color: var(--muted); }
-.rail-foot .row { display: flex; gap: var(--s2); }
+.rail-foot .row { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.rail-foot .row button { white-space: nowrap; overflow-wrap: normal; }
 main { padding: var(--s6) clamp(1rem, 4vw, 3rem); max-width: 1180px; width: 100%; }
 main > * + * { margin-top: var(--s5); }
 main > h1 + .lede { margin-top: 0; }
 h1 { font: 600 2rem/1.15 var(--serif); margin: 0 0 var(--s1); }
 h2 { font: 600 1.2rem/1.3 var(--serif); margin: 0 0 var(--s3); }
-h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 var(--s2); }
+h3, h2.eyebrow { font-size: .8rem; font-family: var(--sans); font-weight: 600; line-height: 1.3; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 var(--s2); }
 .lede { color: var(--muted); margin: 0 0 var(--s5); }
 .grid { display: grid; gap: var(--s4); }
 .cols-3 { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
@@ -91,7 +92,7 @@ button.danger { color: var(--bad); border-color: currentColor; }
 button.ghost { background: transparent; border-color: transparent; padding: .3rem .5rem; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 label { font-weight: 600; font-size: .9rem; display: block; margin-bottom: var(--s1); }
-textarea, input[type="text"], input[type="search"], select { font: inherit; color: var(--ink); background: var(--code); border: 1px solid var(--line); border-radius: var(--r); padding: .5rem .6rem; width: 100%; }
+textarea, input[type="text"], input[type="search"], input[type="number"], select { font: inherit; color: var(--ink); background: var(--code); border: 1px solid var(--line); border-radius: var(--r); padding: .5rem .6rem; width: 100%; }
 textarea { min-height: 150px; resize: vertical; font-family: var(--mono); font-size: .9rem; }
 .hint { color: var(--muted); font-size: .82rem; margin-top: var(--s1); }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
@@ -374,8 +375,8 @@ async function viewPanel() {
   } }, t("panel.refresh"));
   page(t("panel.title"), t("panel.lede"),
     h("div", { class: "grid cols-3" },
-      h("section", { class: "card", "aria-labelledby": "spend-h" }, h("h3", { id: "spend-h", text: t("panel.spend") }), h("div", { class: "figure", text: money(state.spend_today_usd) })),
-      h("section", { class: "card", "aria-labelledby": "queue-h" }, h("h3", { id: "queue-h", text: t("panel.queue") }), h("div", { class: "figure" }, String(state.active.length), " ", h("small", { text: state.active.map((run) => run.id).join(", ") || t("panel.none") })))
+      h("section", { class: "card", "aria-labelledby": "spend-h" }, h("h2", { class: "eyebrow", id: "spend-h", text: t("panel.spend") }), h("div", { class: "figure", text: money(state.spend_today_usd) })),
+      h("section", { class: "card", "aria-labelledby": "queue-h" }, h("h2", { class: "eyebrow", id: "queue-h", text: t("panel.queue") }), h("div", { class: "figure" }, String(state.active.length), " ", h("small", { text: state.active.map((run) => run.id).join(", ") || t("panel.none") })))
     ),
     h("section", { class: "stack", "aria-labelledby": "agents-h" },
       h("div", { class: "toolbar" }, h("h2", { id: "agents-h", text: t("panel.agents") }), refresh),
@@ -439,12 +440,12 @@ async function viewNew() {
         h("div", { class: "toolbar" }, h("button", { type: "button", class: "ghost", onclick: () => { const first = Object.keys(routes.agents)[0]; ladder.push({ tier: ladder[0].tier, agent: first, model: "", effort: "", billing: routes.agents[first].billing, note: "" }); renderPlan(); } }, `+ ${t("new.add")}`)))));
     planBox.replaceChildren(
       h("section", { class: "card stack", "aria-labelledby": "class-h" },
-        h("h3", { id: "class-h", text: t("new.classification") }),
+        h("h2", { class: "eyebrow", id: "class-h", text: t("new.classification") }),
         h("div", { class: "toolbar" },
           h("span", { class: "tag", text: `complexity ${c.complexity}` }), h("span", { class: "tag", text: c.kind }),
           h("span", { class: "tag", text: `risk ${c.risk}` }), h("span", { class: "tag", text: c.needs_write ? t("new.write") : t("new.readonly") }),
           h("span", { class: "meta", text: `${c.source}: ${c.reason}` })),
-        h("h3", { text: t("new.reasons") }),
+        h("h2", { class: "eyebrow", text: t("new.reasons") }),
         h("ul", { class: "reasons" }, plan.reasons.map((reason) => h("li", { text: reason })), plan.skipped.map((reason) => h("li", { class: "meta", text: reason })))),
       h("section", { class: "stack", "aria-labelledby": "route-h" }, h("h2", { id: "route-h", text: t("new.route") }), h("p", { class: "hint", text: t("new.edit") }), ladders));
   }
@@ -605,7 +606,7 @@ async function viewHistory() {
 
 function barChart(title, groups, value, format) {
   const max = Math.max(...groups.map(value), 0) || 1;
-  return h("section", { class: "card stack", "aria-label": title }, h("h3", { text: title }),
+  return h("section", { class: "card stack", "aria-label": title }, h("h2", { class: "eyebrow", text: title }),
     groups.length ? h("div", { class: "bars", role: "list" }, groups.map((group) => {
       const fill = h("div", { class: "fill" });
       fill.style.width = `${Math.round((value(group) / max) * 100)}%`;
@@ -617,7 +618,7 @@ function barChart(title, groups, value, format) {
 async function viewStats() {
   const stats = await api("/api/stats");
   const saving = stats.savings;
-  const savingCard = h("section", { class: "card" }, h("h3", { text: t("stats.savings") }),
+  const savingCard = h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("stats.savings") }),
     saving.saved_usd === null
       ? h("p", { class: "meta", text: `${t("stats.nosavings")} (${saving.baseline_source})` })
       : h("div", {}, h("div", { class: "figure", text: money(saving.saved_usd) }), h("p", { class: "meta", text: `${t("stats.saved")} · ${saving.runs} runs · ${money(saving.actual_usd)} vs ${money(saving.baseline_usd)}` })));
@@ -625,7 +626,7 @@ async function viewStats() {
     h("thead", {}, h("tr", {}, ["col.agent", "col.attempts", "col.success", "col.cost", "col.latency"].map((key) => h("th", { scope: "col", text: t(key) })))),
     h("tbody", {}, groups.map((group) => h("tr", {}, h("td", { text: group.key }), h("td", { class: "num", text: group.attempts }), h("td", { class: "num", text: `${Math.round(group.success_rate * 100)}%` }), h("td", { class: "num", text: `${money(group.cost_usd)} (${group.cost_known} ${t("stats.known")})` }), h("td", { class: "num", text: seconds(group.mean_duration_s) }))))));
   page(t("stats.title"), t("stats.lede"),
-    h("div", { class: "grid cols-3" }, savingCard, h("section", { class: "card" }, h("h3", { text: t("panel.spend") }), h("div", { class: "figure", text: money(stats.spend_today_usd) }))),
+    h("div", { class: "grid cols-3" }, savingCard, h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("panel.spend") }), h("div", { class: "figure", text: money(stats.spend_today_usd) }))),
     h("div", { class: "grid cols-2" },
       barChart(t("stats.success"), stats.by_agent, (g) => g.success_rate, (g) => `${Math.round(g.success_rate * 100)}%`),
       barChart(t("stats.cost"), stats.by_agent, (g) => g.cost_usd, (g) => money(g.cost_usd)),
@@ -737,6 +738,7 @@ function setupItem(item) {
   const output = h("div", { "aria-live": "polite" });
   let badge;
   if (!item.installed) badge = h("span", { class: "badge b-mute", text: t("agent.missing") });
+  else if (item.auth === "key") badge = h("span", { class: "badge b-warn", text: t("setup.key_needed") });
   else if (item.auth && item.auth !== "ok") badge = h("span", { class: `badge ${AUTH_TONE[item.auth] || "b-warn"}`, text: t("setup.login_needed") });
   else badge = h("span", { class: "badge b-ok", text: t("setup.ready") });
   const actions = h("div", { class: "toolbar" });
@@ -744,7 +746,7 @@ function setupItem(item) {
   if (item.installed && item.login && item.auth !== "ok") {
     actions.append(h("button", { type: "button", onclick: () => output.replaceChildren(h("p", { class: "hint", text: t("setup.login_hint") }), commandLine(item.login)) }, t("setup.login")));
   }
-  if (item.key_env) {
+  if (item.key_env && !item.key_present) {
     actions.append(h("button", { type: "button", onclick: () => output.replaceChildren(h("p", { class: "hint", text: t("setup.key_hint") }), commandLine(`timonel keys set ${item.key_env}`)) }, t("setup.key")));
   }
   return h("li", { class: "card setup-item", "data-key": item.key },
@@ -762,10 +764,10 @@ async function viewSetup() {
   const total = data.items.filter(shown).length;
   page(t("setup.title"), t("setup.lede"),
     h("div", { class: "grid cols-3" },
-      h("section", { class: "card" }, h("h3", { text: t("setup.progress") }), h("div", { class: "figure", text: `${done} / ${total}` }),
+      h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("setup.progress") }), h("div", { class: "figure", text: `${done} / ${total}` }),
         h("progress", { max: String(total), value: String(done), "aria-label": t("setup.progress") })),
-      h("section", { class: "card" }, h("h3", { text: t("setup.system") }), h("p", { class: "meta", text: `${data.os} · ${data.managers.join(", ") || "—"}` }), h("p", { class: "meta", text: `${t("setup.keyring")}: ${data.keyring || "—"}` })),
-      h("section", { class: "card" }, h("h3", { text: t("setup.project") }),
+      h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("setup.system") }), h("p", { class: "meta", text: `${data.os} · ${data.managers.join(", ") || "—"}` }), h("p", { class: "meta", text: `${t("setup.keyring")}: ${data.keyring || "—"}` })),
+      h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("setup.project") }),
         h("p", { class: "meta", text: data.project.path || t("setup.no_project") }),
         data.project.path && !data.project.trusted ? commandLine("timonel trust") : null)),
     h("p", { class: "hint", text: t("setup.privacy") }),
@@ -802,7 +804,13 @@ function setPath(target, path, value) {
     if (typeof node[key] !== "object" || node[key] === null || Array.isArray(node[key])) node[key] = {};
     node = node[key];
   }
-  if (value === undefined) delete node[keys[keys.length - 1]]; else node[keys[keys.length - 1]] = value;
+  if (value !== undefined) { node[keys[keys.length - 1]] = value; return; }
+  delete node[keys[keys.length - 1]];
+  for (let depth = keys.length - 1; depth > 0; depth -= 1) {
+    const parent = keys.slice(0, depth - 1).reduce((current, key) => current[key], target);
+    if (Object.keys(parent[keys[depth - 1]]).length) break;
+    delete parent[keys[depth - 1]];
+  }
 }
 
 function getPath(target, path) {

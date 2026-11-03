@@ -1,6 +1,6 @@
 # `routes.yaml` reference
 
-Timonel loads the built-in [`default_routes.yaml`](../src/timonel/default_routes.yaml) and merges your
+Timonel loads the built-in [`default_routes.yaml`](https://github.com/EduMayMar/Timonel/blob/main/src/timonel/default_routes.yaml) and merges your
 file on top of it:
 
 - mappings merge key by key (you can change one field of one agent);
