@@ -105,3 +105,11 @@ def test_schema_areas_all_have_a_page_label() -> None:
         for key in english
         if key.startswith("ui.settings.area.")
     }
+
+
+def test_schema_language_enum_matches_catalogs() -> None:
+    from timonel import schema
+
+    node = schema.node_at(("language",))
+    assert node is not None
+    assert sorted(node["enum"]) == sorted(["auto", *i18n.LANGUAGES])

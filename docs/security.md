@@ -10,7 +10,7 @@ limits.
 | Your working copy | An agent makes a bad or malicious change | Edits happen in a separate git worktree on branch `timonel/<id>`. Nothing is merged without `timonel apply` or the *Apply* button. |
 | Files outside the repository | An agent writes a path with `..` or a symlink pointing outside | Every changed path is checked after each attempt; escaping paths and outward symlinks reject the attempt. Agents also run with their own sandbox flags (`--sandbox workspace-write`, `--permission-mode acceptEdits`). |
 | API keys | Keys leak to logs, the UI or another agent | Keys come only from environment variables or the OS keyring (`keyring` extra). `env_from` gives a key to one agent's process and removes it from every other agent and from verification commands. Outputs, errors, task text and events are redacted before they are stored or shown. Keys are never written to files. |
-| Router configuration | Repository content or agent output changes routing | `routes.yaml` is only read from your user configuration directory or `--config`, never from the repository. Classifier, reviewer and planner answers are parsed as data and validated against fixed schemas; they can change the tier and the task text, never agents, flags or commands. |
+| Router configuration | Repository content or agent output changes routing | Your user file is read from your configuration directory. A repository's `.timonel.yaml` is ignored until you run `timonel trust`, which shows every command it would add (hooks, verification commands, agent argv) and stores the file's SHA-256; any later change to the file revokes the trust until you review it again. Classifier, reviewer and planner answers are parsed as data and validated against fixed schemas; they can change the tier and the task text, never agents, flags or commands. |
 | Your machine | Shell injection through prompts | No `shell=True` anywhere. Commands are argument lists. Placeholders are filled once and never re-expanded. On Windows, npm `.cmd` shims are resolved to `node script.js`; any other batch shim refuses arguments containing cmd.exe metacharacters. |
 | Your machine | A planted `claude.cmd` or `git.exe` in the repository | On Windows, executables are only accepted from folders listed in `PATH`, never from the current directory (`NoDefaultCurrentDirectoryInExePath` is also set). |
 | Your machine | Agent-controlled code runs during verification | Verification runs the project's own tests, which the agent may have edited. Timonel runs them with a minimal environment (`PATH`, home, temp and locale variables, plus names you list in `execution.verify_env`), so API keys and tokens in your shell are not visible to them. They are not sandboxed: only run Timonel on repositories and tasks you trust, as you would run their tests yourself. |
@@ -43,6 +43,42 @@ The UI can launch agents with write access, so it is locked down:
 Another local user or process running as you can still reach `127.0.0.1`; without the session it gets
 `401`. Treat the printed URL like a password and close the server when you are done. Stopping the
 server with Ctrl+C cancels running agents and waits for them to stop.
+
+- The *Setup* page only runs package-manager installs that need no administrator rights, after a
+  confirmation that shows the exact command. Steps that need `sudo`/UAC or a downloaded script are only
+  shown, with a copy button, to run yourself. Logins and API keys are never handled in the browser: the
+  page shows the terminal command (`codex login`, `timonel keys set NAME`).
+- The *Settings* page writes your user file after server-side validation and keeps a `.bak` copy. That
+  file can define commands (hooks, agents), so the page is as powerful as editing the file yourself.
+
+## Installer (`timonel start`)
+
+- It never elevates privileges. Commands that need `sudo` or an administrator prompt are printed for
+  you to run.
+- It never pipes a download into a shell. When a vendor only offers an install script, Timonel downloads
+  it, shows it with its SHA-256 and asks before running it.
+- Official package managers come first (winget, Homebrew, npm…). Each command is explained, with its
+  approximate size, before you choose install, skip, explain or quit.
+- `--dry-run` shows everything and changes nothing. `--yes` only applies to components you list with
+  `--allow`.
+- Every executed action is appended to `audit.log` in the data directory with the command, exit code
+  and how to undo it. Progress is kept in `start-state.json`, so an interrupted run resumes.
+
+## Accounts and API keys
+
+Timonel never asks for, sees or stores the passwords or tokens of your accounts. Logins run the
+vendor's official command in your terminal (`claude`, `codex login`, `gh auth login`…) and Timonel only
+reads the resulting status afterwards. API keys you choose to give Timonel are typed with hidden input
+and saved in the system keyring (`timonel keys set NAME`), never in YAML, logs or the repository.
+
+## Privacy
+
+- No telemetry. Timonel makes no network request of its own except the ones you ask for: agent CLIs and
+  provider APIs you configured, package downloads in `timonel start`, and webhooks you set. A test fails
+  if any command opens an unsolicited connection.
+- The update check is off by default (`privacy.update_check`).
+- Outputs stored in the local ledger are redacted; `privacy.store_outputs: false` stores none.
+  `privacy.retention_days` and `timonel purge` delete old runs.
 
 ## MCP server
 

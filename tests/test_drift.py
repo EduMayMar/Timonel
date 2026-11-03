@@ -62,3 +62,32 @@ def test_registry_connectors_with_drift_metadata_have_flags_to_check() -> None:
         if (data.get("install") or {}).get("drift"):
             assert drift.connector_flags(data["agent"]), path.name
     assert json.dumps(drift.markdown({"x": {"error": "boom"}})).count("boom") == 1
+
+
+def test_generated_docs_are_up_to_date() -> None:
+    generator_spec = importlib.util.spec_from_file_location(
+        "gen_docs", SCRIPT.parent / "gen_docs.py"
+    )
+    assert generator_spec is not None and generator_spec.loader is not None
+    generator = importlib.util.module_from_spec(generator_spec)
+    generator_spec.loader.exec_module(generator)
+    assert generator.main(["--check"]) == 0
+    configuration = (SCRIPT.parent.parent / "docs" / "reference" / "configuration.md").read_text(
+        encoding="utf-8"
+    )
+    from timonel import schema
+
+    for option in schema.options():
+        assert f"`{option.key}`" in configuration
+
+
+def test_every_recipe_validates() -> None:
+    import re
+
+    from timonel.config import validate_text
+
+    text = (SCRIPT.parent.parent / "docs" / "recipes.md").read_text(encoding="utf-8")
+    blocks = re.findall(r"```yaml\n(.*?)```", text, re.DOTALL)
+    assert len(blocks) >= 5
+    for block in blocks:
+        validate_text(block, "recipe.yaml")
