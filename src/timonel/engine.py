@@ -796,7 +796,8 @@ class Engine:
         diff_stat = ""
         if plan.write:
             summary = gitops.diff_summary(cwd, base, "HEAD")
-            diff_stat = f"{len(summary.files)} files, +{summary.insertions} -{summary.deletions}"
+            count = len(summary.files)
+            diff_stat = f"{count} file{'' if count == 1 else 's'}, +{summary.insertions} -{summary.deletions}"
         label = outcome.final_step.label if outcome.final_step else ""
         self.ledger.update_run(
             run_id,

@@ -431,7 +431,7 @@ def cmd_validate(args: argparse.Namespace, config: Config) -> int:
 def cmd_ui(args: argparse.Namespace, config: Config) -> int:
     from timonel.web.server import serve
 
-    return serve(config, port=args.port, open_browser=not args.no_browser)
+    return serve(config, port=args.port, open_browser=not args.no_browser, repo=Path(args.repo))
 
 
 def cmd_mcp(args: argparse.Namespace, config: Config) -> int:
@@ -524,6 +524,7 @@ def build_parser() -> argparse.ArgumentParser:
     ui = sub.add_parser("ui", help="open the local web interface")
     ui.add_argument("--port", type=int, default=0)
     ui.add_argument("--no-browser", action="store_true")
+    ui.add_argument("--repo", default=".")
     ui.set_defaults(handler=cmd_ui)
 
     mcp = sub.add_parser("mcp", help="serve plan/run/status over MCP (stdio)")

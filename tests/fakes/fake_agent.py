@@ -83,11 +83,12 @@ def answer_for(name: str, prompt: str) -> str:
     if "TIMONEL_PLAN" in prompt:
         return os.environ.get("FAKE_PLAN", json.dumps({"subtasks": []}))
     said = directives(prompt, name, "say")
-    return said[-1] if said else f"{name} done"
+    return said[-1] if said else os.environ.get("FAKE_SAY", f"{name} done")
 
 
 def apply_edits(name: str, prompt: str) -> None:
-    for edit in directives(prompt, name, "edit"):
+    extra = [os.environ["FAKE_EDIT"]] if os.environ.get("FAKE_EDIT") else []
+    for edit in directives(prompt, name, "edit") + extra:
         path, _, content = edit.partition("=")
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
