@@ -80,6 +80,7 @@ def create_project(target: Path) -> Path:
             "-c",
             "commit.gpgsign=false",
             "commit",
+            "--allow-empty",
             "-q",
             "-m",
             "Demo project",

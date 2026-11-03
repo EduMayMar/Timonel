@@ -1,0 +1,11 @@
+PackageIdentifier: EduMayMar.Timonel
+PackageVersion: ${version}
+PackageLocale: en-US
+Publisher: EduMayMar
+PackageName: Timonel
+PackageUrl: https://github.com/EduMayMar/Timonel
+License: MIT
+LicenseUrl: https://github.com/EduMayMar/Timonel/blob/main/LICENSE
+ShortDescription: Route coding tasks to the right CLI agent and model, escalate on failure.
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

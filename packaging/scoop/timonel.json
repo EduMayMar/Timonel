@@ -1,0 +1,24 @@
+{
+  "version": "${version}",
+  "description": "Route coding tasks to the right CLI agent and model, escalate on failure.",
+  "homepage": "https://github.com/EduMayMar/Timonel",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/EduMayMar/Timonel/releases/download/v${version}/timonel-windows-x64.exe#/timonel.exe",
+      "hash": "${sha_windows}"
+    }
+  },
+  "bin": "timonel.exe",
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/EduMayMar/Timonel/releases/download/v$$version/timonel-windows-x64.exe#/timonel.exe"
+      }
+    },
+    "hash": {
+      "url": "https://github.com/EduMayMar/Timonel/releases/download/v$$version/SHA256SUMS"
+    }
+  }
+}

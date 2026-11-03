@@ -91,3 +91,71 @@ def test_every_recipe_validates() -> None:
     assert len(blocks) >= 5
     for block in blocks:
         validate_text(block, "recipe.yaml")
+
+
+def test_manifest_templates_fill_with_release_checksums(tmp_path: Path) -> None:
+    fill_spec = importlib.util.spec_from_file_location(
+        "fill_manifests", SCRIPT.parent / "fill_manifests.py"
+    )
+    assert fill_spec is not None and fill_spec.loader is not None
+    filler = importlib.util.module_from_spec(fill_spec)
+    fill_spec.loader.exec_module(filler)
+    sums = tmp_path / "SHA256SUMS"
+    sums.write_text(
+        "a" * 64
+        + "  timonel-windows-x64.exe\n"
+        + "b" * 64
+        + "  timonel-macos-arm64\n"
+        + "c" * 64
+        + " *timonel-linux-x64\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "out"
+    assert filler.main(["1.2.3", str(sums), "--out", str(out)]) == 0
+    scoop = json.loads((out / "scoop" / "timonel.json").read_text(encoding="utf-8"))
+    assert scoop["version"] == "1.2.3"
+    assert scoop["architecture"]["64bit"]["hash"] == "a" * 64
+    assert "$version" in scoop["autoupdate"]["architecture"]["64bit"]["url"]
+    winget = (out / "winget" / "EduMayMar.Timonel.installer.yaml").read_text(encoding="utf-8")
+    assert "v1.2.3/timonel-windows-x64.exe" in winget and "a" * 64 in winget
+    formula = (out / "homebrew" / "timonel.rb").read_text(encoding="utf-8")
+    assert "b" * 64 in formula and "c" * 64 in formula and "#{bin}" in formula
+    sums.write_text("a" * 64 + "  timonel-windows-x64.exe\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        filler.main(["1.2.3", str(sums), "--out", str(out)])
+
+
+@pytest.mark.skipif(WINDOWS, reason="POSIX shell installer")
+def test_shell_installer_shows_the_command_and_asks(tmp_path: Path) -> None:
+    import subprocess
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "log"
+    uv = bin_dir / "uv"
+    uv.write_text(f'#!/bin/sh\necho "$@" >> "{log}"\n', encoding="utf-8")
+    uv.chmod(0o755)
+    script = SCRIPT.parent.parent / "install" / "install.sh"
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin"}
+    declined = subprocess.run(
+        ["sh", str(script)],
+        input="n\n",
+        capture_output=True,
+        text=True,
+        env=env,
+        start_new_session=True,
+    )
+    assert "uv tool install timonel" in declined.stdout
+    assert "Nothing was changed." in declined.stdout
+    assert not log.exists()
+    accepted = subprocess.run(
+        ["sh", str(script)],
+        input="y\n",
+        capture_output=True,
+        text=True,
+        env=env,
+        start_new_session=True,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    assert log.read_text(encoding="utf-8").strip() == "tool install timonel"
+    assert "sudo" not in script.read_text(encoding="utf-8").replace("never uses sudo", "")

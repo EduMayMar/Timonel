@@ -251,6 +251,9 @@ def test_demo_runs_offline(
     assert "verify failed" in out and "verify passed" in out
     assert run_git(tmp_path / "demo" / "project", "status", "--porcelain") == ""
     assert no_network == []
+    code, out = run(capsys, "demo", "--path", str(tmp_path / "demo"))
+    assert code == 0, out
+    assert "succeeded" in out
 
 
 def test_purge(env: Path, repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
