@@ -1,0 +1,9 @@
+name: openai
+kind: provider
+title: OpenAI API
+vendor: OpenAI
+homepage: https://platform.openai.com/docs/api-reference
+verification: {status: unverified, date: "2026-11-03", source: "OpenAI API reference was not reachable from the build environment"}
+api_key: {env: OPENAI_API_KEY, url: "https://platform.openai.com/api-keys"}
+provider: {api: openai, base_url: "https://api.openai.com/v1", key_env: OPENAI_API_KEY}
+agent: {command: openai, billing: api, parser: text}

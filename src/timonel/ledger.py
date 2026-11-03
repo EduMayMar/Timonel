@@ -162,7 +162,7 @@ class Ledger:
         marks = ", ".join("?" * (3 + len(columns)))
         with self.transaction() as db:
             db.execute(
-                f"INSERT INTO runs ({names}) VALUES ({marks})",  # noqa: S608
+                f"INSERT INTO runs ({names}) VALUES ({marks})",
                 (run_id, now, now, *columns.values()),
             )
 
@@ -173,7 +173,7 @@ class Ledger:
         assignments = ", ".join(f"{key} = ?" for key in columns)
         with self.transaction() as db:
             db.execute(
-                f"UPDATE runs SET {assignments}, updated = ? WHERE id = ?",  # noqa: S608
+                f"UPDATE runs SET {assignments}, updated = ? WHERE id = ?",
                 (*columns.values(), time.time(), run_id),
             )
 
@@ -210,7 +210,7 @@ class Ledger:
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with self.lock:
             rows = self.connection.execute(
-                f"SELECT * FROM runs {where} ORDER BY created DESC LIMIT ?",  # noqa: S608
+                f"SELECT * FROM runs {where} ORDER BY created DESC LIMIT ?",
                 (*params, limit),
             ).fetchall()
         return [decode_run(row) for row in rows]
@@ -253,7 +253,7 @@ class Ledger:
         assignments = ", ".join(f"{key} = ?" for key in columns)
         with self.transaction() as db:
             db.execute(
-                f"UPDATE attempts SET {assignments} WHERE id = ?",  # noqa: S608
+                f"UPDATE attempts SET {assignments} WHERE id = ?",
                 (*columns.values(), attempt_id),
             )
 

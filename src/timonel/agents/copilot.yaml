@@ -1,0 +1,28 @@
+name: copilot
+kind: agent
+title: GitHub Copilot CLI
+vendor: GitHub
+homepage: https://docs.github.com/copilot/how-tos/copilot-cli
+verification: {status: verified, version: 1.0.105, date: "2026-11-03", source: "copilot --help; copilot help environment"}
+install:
+  approx_size_mb: 190
+  npm: ["npm", "install", "-g", "@github/copilot"]
+  pnpm: ["pnpm", "add", "-g", "@github/copilot"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@github/copilot"], pnpm: ["pnpm", "remove", "-g", "@github/copilot"]}
+  drift: {npm: "@github/copilot", help: [["--help"]]}
+login: {command: ["copilot", "login"], flow: device}
+agent:
+  command: copilot
+  billing: subscription
+  parser: text
+  prompt_via: arg
+  base_args: ["--silent", "--no-color", "--no-ask-user", "--no-auto-update", "--allow-all-tools"]
+  read_args: ["--deny-tool=write", "--deny-tool=shell"]
+  write_args: ["--deny-tool=shell"]
+  model_args: ["--model", "{model}"]
+  effort_args: ["--reasoning-effort", "{effort}"]
+  prompt_args: ["-p", "{prompt}"]
+  dangerous_args: ["--allow-all"]
+  known_models: [auto]
+  detect: {version: ["--version"], auth_env: [COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN]}
+  rate_limit_patterns: ["quota", "premium requests", "AI credits"]

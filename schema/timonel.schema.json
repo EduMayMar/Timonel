@@ -1,0 +1,2085 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EduMayMar/Timonel/schema/timonel.schema.json",
+  "title": "Timonel configuration",
+  "description": "Configuration for Timonel (routes.yaml or .timonel.yaml).",
+  "type": "object",
+  "additionalProperties": false,
+  "x-areas": [
+    "general",
+    "routing",
+    "agents",
+    "classifier",
+    "review",
+    "escalation",
+    "verification",
+    "execution",
+    "budgets",
+    "privacy",
+    "ui",
+    "notifications",
+    "hooks",
+    "paths"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [
+        1
+      ],
+      "default": 1,
+      "x-area": "general",
+      "description": "Schema version.",
+      "x-i18n": {
+        "es": "Versión del esquema.",
+        "pt": "Versão do esquema."
+      }
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "simple",
+        "expert"
+      ],
+      "default": "simple",
+      "x-area": "general",
+      "description": "Simple mode hides advanced options in the CLI help and the web UI; expert shows everything.",
+      "x-i18n": {
+        "es": "El modo simple oculta opciones avanzadas en la ayuda y en la interfaz web; el experto lo muestra todo.",
+        "pt": "O modo simples oculta opções avançadas na ajuda e na interface web; o especialista mostra tudo."
+      }
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "en",
+        "es",
+        "pt"
+      ],
+      "default": "auto",
+      "x-area": "general",
+      "description": "Language of messages. auto follows TIMONEL_LANG and then the system locale.",
+      "x-i18n": {
+        "es": "Idioma de los mensajes. auto usa TIMONEL_LANG y después el idioma del sistema.",
+        "pt": "Idioma das mensagens. auto usa TIMONEL_LANG e depois o idioma do sistema."
+      }
+    },
+    "default_profile": {
+      "type": "string",
+      "default": "balanced",
+      "x-area": "routing",
+      "description": "Profile used when a command does not pass --profile.",
+      "x-i18n": {
+        "es": "Perfil usado cuando un comando no indica --profile.",
+        "pt": "Perfil usado quando um comando não indica --profile."
+      }
+    },
+    "agents": {
+      "type": "object",
+      "x-area": "agents",
+      "description": "Agent and provider connectors, merged over the built-in registry (agents/*.yaml).",
+      "x-i18n": {
+        "es": "Conectores de agentes y proveedores, combinados sobre el registro incluido (agents/*.yaml).",
+        "pt": "Conectores de agentes e provedores, combinados sobre o registro incluído (agents/*.yaml)."
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/agent"
+      },
+      "default": {}
+    },
+    "rate_limit_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "regex"
+      },
+      "x-area": "agents",
+      "x-advanced": true,
+      "description": "Regular expressions that mark a failed attempt as a usage limit, for every agent.",
+      "x-i18n": {
+        "es": "Expresiones regulares que marcan un intento fallido como límite de uso, para todos los agentes.",
+        "pt": "Expressões regulares que marcam uma tentativa falha como limite de uso, para todos os agentes."
+      }
+    },
+    "tiers": {
+      "type": "object",
+      "x-area": "routing",
+      "description": "Ordered ladder of rungs for each tier from 1 (trivial) to 4 (architecture).",
+      "x-i18n": {
+        "es": "Escalera ordenada de peldaños para cada nivel, de 1 (trivial) a 4 (arquitectura).",
+        "pt": "Escada ordenada de degraus para cada nível, de 1 (trivial) a 4 (arquitetura)."
+      },
+      "propertyNames": {
+        "enum": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/ladder"
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "x-area": "routing",
+      "description": "Named routing profiles.",
+      "x-i18n": {
+        "es": "Perfiles de enrutamiento con nombre.",
+        "pt": "Perfis de roteamento com nome."
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/profile"
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "routing",
+      "description": "Rules that adjust routing by task kind, language, paths and size.",
+      "x-i18n": {
+        "es": "Reglas que ajustan el enrutamiento por tipo de tarea, lenguaje, rutas y tamaño.",
+        "pt": "Regras que ajustam o roteamento por tipo de tarefa, linguagem, caminhos e tamanho."
+      },
+      "properties": {
+        "prefer_subscription": {
+          "type": "boolean",
+          "default": true,
+          "description": "Within a tier, try subscription agents before pay-per-use APIs.",
+          "x-i18n": {
+            "es": "Dentro de un nivel, probar los agentes de suscripción antes que las APIs de pago por uso.",
+            "pt": "Dentro de um nível, tentar os agentes de assinatura antes das APIs pagas por uso."
+          }
+        },
+        "deny_agents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Agents never used.",
+          "x-i18n": {
+            "es": "Agentes que nunca se usan.",
+            "pt": "Agentes que nunca são usados."
+          }
+        },
+        "deny_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Models never used, as model or agent:model.",
+          "x-i18n": {
+            "es": "Modelos que nunca se usan, como modelo o agente:modelo.",
+            "pt": "Modelos que nunca são usados, como modelo ou agente:modelo."
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rule"
+          },
+          "default": [],
+          "x-advanced": true,
+          "description": "Ordered rules; every matching rule is applied to the plan.",
+          "x-i18n": {
+            "es": "Reglas en orden; se aplican al plan todas las que coinciden.",
+            "pt": "Regras em ordem; todas as que coincidem são aplicadas ao plano."
+          }
+        }
+      }
+    },
+    "classifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "classifier",
+      "description": "How tasks are classified.",
+      "x-i18n": {
+        "es": "Cómo se clasifican las tareas.",
+        "pt": "Como as tarefas são classificadas."
+      },
+      "properties": {
+        "use_model": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask a model to classify. When false, only the heuristics are used.",
+          "x-i18n": {
+            "es": "Pedir la clasificación a un modelo. Si es false, solo se usan las heurísticas.",
+            "pt": "Pedir a classificação a um modelo. Se for false, só as heurísticas são usadas."
+          }
+        },
+        "ladder": {
+          "$ref": "#/$defs/ladder",
+          "description": "Agents or providers tried in order to classify.",
+          "x-i18n": {
+            "es": "Agentes o proveedores que se prueban en orden para clasificar.",
+            "pt": "Agentes ou provedores tentados em ordem para classificar."
+          }
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 0,
+          "x-advanced": true,
+          "description": "Extra attempts per rung when the answer does not match the schema.",
+          "x-i18n": {
+            "es": "Intentos extra por peldaño cuando la respuesta no cumple el esquema.",
+            "pt": "Tentativas extras por degrau quando a resposta não segue o esquema."
+          }
+        },
+        "on_failure": {
+          "type": "string",
+          "enum": [
+            "heuristic",
+            "fail"
+          ],
+          "default": "heuristic",
+          "description": "What to do when no model gives a valid classification.",
+          "x-i18n": {
+            "es": "Qué hacer si ningún modelo da una clasificación válida.",
+            "pt": "O que fazer se nenhum modelo der uma classificação válida."
+          }
+        },
+        "prompt_template": {
+          "type": "string",
+          "x-advanced": true,
+          "description": "Prompt sent to the classifier. Must contain {task} and {marker}.",
+          "x-i18n": {
+            "es": "Prompt que se envía al clasificador. Debe contener {task} y {marker}.",
+            "pt": "Prompt enviado ao classificador. Deve conter {task} e {marker}."
+          }
+        },
+        "heuristics": {
+          "$ref": "#/$defs/heuristics"
+        }
+      }
+    },
+    "planner": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "routing",
+      "x-advanced": true,
+      "description": "Who splits tasks into subtasks.",
+      "x-i18n": {
+        "es": "Quién divide las tareas en subtareas.",
+        "pt": "Quem divide as tarefas em subtarefas."
+      },
+      "properties": {
+        "ladder": {
+          "$ref": "#/$defs/ladder",
+          "description": "Agents or providers tried in order to split tasks.",
+          "x-i18n": {
+            "es": "Agentes o proveedores que se prueban en orden para dividir tareas.",
+            "pt": "Agentes ou provedores tentados em ordem para dividir tarefas."
+          }
+        },
+        "prompt_template": {
+          "type": "string",
+          "description": "Prompt for the planner. Must contain {task}, {marker} and {max_subtasks}.",
+          "x-i18n": {
+            "es": "Prompt del planificador. Debe contener {task}, {marker} y {max_subtasks}.",
+            "pt": "Prompt do planejador. Deve conter {task}, {marker} e {max_subtasks}."
+          }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "review",
+      "description": "Cross review of changes by a different agent.",
+      "x-i18n": {
+        "es": "Revisión cruzada de cambios por otro agente.",
+        "pt": "Revisão cruzada de mudanças por outro agente."
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Review changes at or above min_tier.",
+          "x-i18n": {
+            "es": "Revisar cambios desde min_tier.",
+            "pt": "Revisar mudanças a partir de min_tier."
+          }
+        },
+        "min_tier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 3,
+          "description": "Lowest tier whose changes are reviewed.",
+          "x-i18n": {
+            "es": "Nivel más bajo cuyos cambios se revisan.",
+            "pt": "Nível mais baixo cujas mudanças são revisadas."
+          }
+        },
+        "reviewers": {
+          "$ref": "#/$defs/ladder",
+          "description": "Reviewers in order; empty uses every tier from the top. The executor's agent is skipped.",
+          "x-i18n": {
+            "es": "Revisores en orden; vacío usa todos los niveles desde el más alto. Se salta el agente ejecutor.",
+            "pt": "Revisores em ordem; vazio usa todos os níveis a partir do mais alto. O agente executor é pulado."
+          }
+        },
+        "max_reviewers_tried": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3,
+          "x-advanced": true,
+          "description": "How many reviewers are tried before giving up.",
+          "x-i18n": {
+            "es": "Cuántos revisores se prueban antes de rendirse.",
+            "pt": "Quantos revisores são tentados antes de desistir."
+          }
+        },
+        "strictness": {
+          "type": "string",
+          "enum": [
+            "lenient",
+            "normal",
+            "strict"
+          ],
+          "default": "normal",
+          "description": "How strict the reviewer is asked to be.",
+          "x-i18n": {
+            "es": "Qué tan estricto se pide que sea el revisor.",
+            "pt": "Quão rigoroso o revisor deve ser."
+          }
+        },
+        "max_rounds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 1,
+          "description": "Fix rounds after a rejection.",
+          "x-i18n": {
+            "es": "Rondas de corrección tras un rechazo.",
+            "pt": "Rodadas de correção após uma rejeição."
+          }
+        },
+        "on_no_verdict": {
+          "type": "string",
+          "enum": [
+            "approve",
+            "reject"
+          ],
+          "default": "approve",
+          "description": "What to do when no reviewer gives a valid verdict.",
+          "x-i18n": {
+            "es": "Qué hacer si ningún revisor da un veredicto válido.",
+            "pt": "O que fazer se nenhum revisor der um veredito válido."
+          }
+        },
+        "diff_chars": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 2000000,
+          "default": 60000,
+          "x-advanced": true,
+          "description": "Maximum diff characters sent to the reviewer.",
+          "x-i18n": {
+            "es": "Caracteres máximos del diff enviados al revisor.",
+            "pt": "Caracteres máximos do diff enviados ao revisor."
+          }
+        },
+        "prompt_template": {
+          "type": "string",
+          "x-advanced": true,
+          "description": "Prompt for reviewers. Must contain {marker}, {task}, {diff} and {strictness}.",
+          "x-i18n": {
+            "es": "Prompt de los revisores. Debe contener {marker}, {task}, {diff} y {strictness}.",
+            "pt": "Prompt dos revisores. Deve conter {marker}, {task}, {diff} e {strictness}."
+          }
+        }
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "escalation",
+      "description": "When and how to move to another agent or tier.",
+      "x-i18n": {
+        "es": "Cuándo y cómo pasar a otro agente o nivel.",
+        "pt": "Quando e como passar para outro agente ou nível."
+      },
+      "properties": {
+        "max_escalations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 2,
+          "description": "Extra tiers tried after the starting one.",
+          "x-i18n": {
+            "es": "Niveles extra que se prueban tras el inicial.",
+            "pt": "Níveis extras tentados após o inicial."
+          }
+        },
+        "on_verify_failure": {
+          "type": "string",
+          "enum": [
+            "next_tier",
+            "next_rung"
+          ],
+          "default": "next_tier",
+          "description": "Where to go when verification fails.",
+          "x-i18n": {
+            "es": "Adónde ir cuando falla la verificación.",
+            "pt": "Para onde ir quando a verificação falha."
+          }
+        },
+        "on_agent_failure": {
+          "type": "string",
+          "enum": [
+            "next_rung",
+            "next_tier"
+          ],
+          "default": "next_rung",
+          "description": "Where to go when an agent crashes, times out or prints garbage.",
+          "x-i18n": {
+            "es": "Adónde ir cuando un agente falla, se cuelga o imprime basura.",
+            "pt": "Para onde ir quando um agente falha, trava ou imprime lixo."
+          }
+        },
+        "context_chars": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200000,
+          "default": 4000,
+          "description": "Characters of the previous error passed to the next attempt.",
+          "x-i18n": {
+            "es": "Caracteres del error anterior que se pasan al siguiente intento.",
+            "pt": "Caracteres do erro anterior passados para a próxima tentativa."
+          }
+        },
+        "context_attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 2,
+          "x-advanced": true,
+          "description": "How many previous failures are included as context.",
+          "x-i18n": {
+            "es": "Cuántos fallos anteriores se incluyen como contexto.",
+            "pt": "Quantas falhas anteriores são incluídas como contexto."
+          }
+        },
+        "cooldown_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440,
+          "default": 30,
+          "description": "Rest time for an agent after a usage limit.",
+          "x-i18n": {
+            "es": "Descanso de un agente tras un límite de uso.",
+            "pt": "Descanso de um agente após um limite de uso."
+          }
+        },
+        "reset_between_attempts": {
+          "type": "boolean",
+          "default": true,
+          "x-advanced": true,
+          "description": "Reset the worktree to the base commit before each new attempt.",
+          "x-i18n": {
+            "es": "Restablecer el worktree al commit base antes de cada intento.",
+            "pt": "Restaurar o worktree ao commit base antes de cada tentativa."
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "verification",
+      "description": "Commands that decide whether a change is accepted.",
+      "x-i18n": {
+        "es": "Comandos que deciden si un cambio se acepta.",
+        "pt": "Comandos que decidem se uma mudança é aceita."
+      },
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command"
+          },
+          "default": [],
+          "description": "Commands that must succeed, as argument lists.",
+          "x-i18n": {
+            "es": "Comandos que deben tener éxito",
+            "como listas de argumentos.": null,
+            "pt": "Comandos que devem ter sucesso"
+          }
+        },
+        "autodetect": {
+          "type": "boolean",
+          "default": false,
+          "description": "When no commands are set, detect the test command from project files.",
+          "x-i18n": {
+            "es": "Si no hay comandos, detectar el comando de pruebas a partir de los archivos del proyecto.",
+            "pt": "Se não houver comandos, detectar o comando de testes a partir dos arquivos do projeto."
+          }
+        },
+        "detectors": {
+          "type": "array",
+          "x-advanced": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "file",
+              "command"
+            ],
+            "properties": {
+              "file": {
+                "type": "string",
+                "minLength": 1
+              },
+              "command": {
+                "$ref": "#/$defs/command"
+              }
+            }
+          },
+          "description": "File markers and the command they imply, checked in order.",
+          "x-i18n": {
+            "es": "Archivos marcadores y el comando que implican",
+            "en orden.": null,
+            "pt": "Arquivos marcadores e o comando que implicam",
+            "em ordem.": null
+          }
+        },
+        "timeout_s": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 900,
+          "description": "Time limit for each command.",
+          "x-i18n": {
+            "es": "Límite de tiempo por comando.",
+            "pt": "Limite de tempo por comando."
+          }
+        },
+        "success_exit_codes": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "default": [
+            0
+          ],
+          "x-advanced": true,
+          "description": "Exit codes that count as success.",
+          "x-i18n": {
+            "es": "Códigos de salida que cuentan como éxito.",
+            "pt": "Códigos de saída que contam como sucesso."
+          }
+        },
+        "env_allow": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_()]*$"
+          },
+          "default": [],
+          "x-advanced": true,
+          "description": "Extra environment variables passed to verification commands.",
+          "x-i18n": {
+            "es": "Variables de entorno extra que reciben los comandos de verificación.",
+            "pt": "Variáveis de ambiente extras recebidas pelos comandos de verificação."
+          }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "execution",
+      "description": "How agents are run.",
+      "x-i18n": {
+        "es": "Cómo se ejecutan los agentes.",
+        "pt": "Como os agentes são executados."
+      },
+      "properties": {
+        "total_timeout_s": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 1800,
+          "description": "Wall-clock limit per attempt.",
+          "x-i18n": {
+            "es": "Tiempo máximo por intento.",
+            "pt": "Tempo máximo por tentativa."
+          }
+        },
+        "idle_timeout_s": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 300,
+          "description": "Limit without any output.",
+          "x-i18n": {
+            "es": "Tiempo máximo sin salida.",
+            "pt": "Tempo máximo sem saída."
+          }
+        },
+        "orphan_grace_s": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 600,
+          "default": 2.0,
+          "x-advanced": true,
+          "description": "Seconds to wait for output after the agent exits before stopping leftover processes.",
+          "x-i18n": {
+            "es": "Segundos de espera tras salir el agente antes de detener procesos sobrantes.",
+            "pt": "Segundos de espera após o agente sair antes de parar processos restantes."
+          }
+        },
+        "worktree_dir": {
+          "type": "string",
+          "default": "",
+          "x-advanced": true,
+          "description": "Folder for worktrees; empty uses the data directory.",
+          "x-i18n": {
+            "es": "Carpeta de los worktrees; vacío usa el directorio de datos.",
+            "pt": "Pasta dos worktrees; vazio usa o diretório de dados."
+          }
+        },
+        "branch_pattern": {
+          "type": "string",
+          "default": "timonel/{id}",
+          "pattern": "\\{id\\}",
+          "description": "Name of run branches; must contain {id}.",
+          "x-i18n": {
+            "es": "Nombre de las ramas de ejecución; debe contener {id}.",
+            "pt": "Nome dos branches de execução; deve conter {id}."
+          }
+        },
+        "base_ref": {
+          "type": "string",
+          "default": "HEAD",
+          "description": "Commit or branch new worktrees start from.",
+          "x-i18n": {
+            "es": "Commit o rama de la que parten los worktrees.",
+            "pt": "Commit ou branch de onde partem os worktrees."
+          }
+        },
+        "cleanup_on_apply": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remove the worktree and branch after apply.",
+          "x-i18n": {
+            "es": "Borrar worktree y rama tras aplicar.",
+            "pt": "Apagar worktree e branch após aplicar."
+          }
+        },
+        "write_kinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "explain",
+              "edit",
+              "debug",
+              "refactor",
+              "architecture",
+              "review"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "edit",
+            "debug",
+            "refactor",
+            "architecture"
+          ],
+          "description": "Task kinds that get write access in a worktree; others run read-only.",
+          "x-i18n": {
+            "es": "Tipos de tarea con permiso de escritura en un worktree; el resto corre en solo lectura.",
+            "pt": "Tipos de tarefa com permissão de escrita em um worktree; o resto roda somente leitura."
+          }
+        },
+        "agent_env_deny": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "regex"
+          },
+          "default": [],
+          "x-advanced": true,
+          "description": "Environment variable name patterns never passed to agents.",
+          "x-i18n": {
+            "es": "Patrones de nombres de variables de entorno que nunca reciben los agentes.",
+            "pt": "Padrões de nomes de variáveis de ambiente que os agentes nunca recebem."
+          }
+        },
+        "max_output_chars": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 100000000,
+          "default": 4000000,
+          "x-advanced": true,
+          "description": "Output kept in memory per attempt (the tail is kept).",
+          "x-i18n": {
+            "es": "Salida guardada en memoria por intento (se conserva el final).",
+            "pt": "Saída mantida em memória por tentativa (o final é mantido)."
+          }
+        },
+        "stored_output_chars": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000,
+          "default": 200000,
+          "x-advanced": true,
+          "description": "Output stored in the ledger per attempt.",
+          "x-i18n": {
+            "es": "Salida guardada en el registro por intento.",
+            "pt": "Saída guardada no registro por tentativa."
+          }
+        },
+        "max_parallel_runs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 2,
+          "description": "Runs started from the web UI or MCP at the same time.",
+          "x-i18n": {
+            "es": "Ejecuciones simultáneas desde la interfaz web o MCP.",
+            "pt": "Execuções simultâneas a partir da interface web ou MCP."
+          }
+        },
+        "race_contenders": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 4,
+          "default": 2,
+          "description": "Agents that compete in --race.",
+          "x-i18n": {
+            "es": "Agentes que compiten en --race.",
+            "pt": "Agentes que competem em --race."
+          }
+        }
+      }
+    },
+    "adaptive": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "routing",
+      "description": "Reorder ladders from your own success rates.",
+      "x-i18n": {
+        "es": "Reordenar escaleras según tus tasas de éxito.",
+        "pt": "Reordenar escadas segundo suas taxas de sucesso."
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use the ledger to reorder rungs.",
+          "x-i18n": {
+            "es": "Usar el registro para reordenar peldaños.",
+            "pt": "Usar o registro para reordenar degraus."
+          }
+        },
+        "min_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "default": 5,
+          "description": "Attempts needed before a route counts.",
+          "x-i18n": {
+            "es": "Intentos necesarios antes de que una ruta cuente.",
+            "pt": "Tentativas necessárias antes que uma rota conte."
+          }
+        }
+      }
+    },
+    "decompose": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "routing",
+      "x-advanced": true,
+      "description": "Splitting complex tasks into subtasks.",
+      "x-i18n": {
+        "es": "División de tareas complejas en subtareas.",
+        "pt": "Divisão de tarefas complexas em subtarefas."
+      },
+      "properties": {
+        "auto": {
+          "type": "boolean",
+          "default": false,
+          "description": "Decompose without --decompose at min_complexity.",
+          "x-i18n": {
+            "es": "Descomponer sin --decompose a partir de min_complexity.",
+            "pt": "Decompor sem --decompose a partir de min_complexity."
+          }
+        },
+        "min_complexity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 4,
+          "description": "Complexity that triggers automatic decomposition.",
+          "x-i18n": {
+            "es": "Complejidad que activa la descomposición automática.",
+            "pt": "Complexidade que ativa a decomposição automática."
+          }
+        },
+        "max_subtasks": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 20,
+          "default": 6,
+          "description": "Most subtasks accepted from the planner.",
+          "x-i18n": {
+            "es": "Máximo de subtareas aceptadas del planificador.",
+            "pt": "Máximo de subtarefas aceitas do planejador."
+          }
+        },
+        "max_parallel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 3,
+          "description": "Subtasks running at the same time.",
+          "x-i18n": {
+            "es": "Subtareas simultáneas.",
+            "pt": "Subtarefas simultâneas."
+          }
+        }
+      }
+    },
+    "budgets": {
+      "type": "array",
+      "x-area": "budgets",
+      "items": {
+        "$ref": "#/$defs/budget"
+      },
+      "default": [],
+      "description": "Spending limits per agent and period, and what to do when one is reached.",
+      "x-i18n": {
+        "es": "Límites de gasto por agente y periodo, y qué hacer al alcanzarlos.",
+        "pt": "Limites de gasto por agente e período, e o que fazer ao atingi-los."
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "privacy",
+      "description": "Logs, redaction and retention. Timonel sends no telemetry.",
+      "x-i18n": {
+        "es": "Registros, redacción y retención. Timonel no envía telemetría.",
+        "pt": "Registros, redação e retenção. Timonel não envia telemetria."
+      },
+      "properties": {
+        "log_level": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error"
+          ],
+          "default": "warning",
+          "description": "Level of the local log file.",
+          "x-i18n": {
+            "es": "Nivel del archivo de log local.",
+            "pt": "Nível do arquivo de log local."
+          }
+        },
+        "log_file": {
+          "type": "string",
+          "default": "",
+          "description": "Log file path; empty disables file logging.",
+          "x-i18n": {
+            "es": "Ruta del archivo de log; vacío lo desactiva.",
+            "pt": "Caminho do arquivo de log; vazio o desativa."
+          }
+        },
+        "redact_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "regex"
+          },
+          "default": [],
+          "description": "Extra regular expressions masked in logs, the ledger and the UI.",
+          "x-i18n": {
+            "es": "Expresiones regulares extra que se ocultan en logs, registro e interfaz.",
+            "pt": "Expressões regulares extras ocultadas em logs, registro e interface."
+          }
+        },
+        "secret_env_names": {
+          "type": "string",
+          "format": "regex",
+          "default": "(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH)",
+          "x-advanced": true,
+          "description": "Environment variable names whose values are always masked.",
+          "x-i18n": {
+            "es": "Nombres de variables de entorno cuyos valores siempre se ocultan.",
+            "pt": "Nomes de variáveis de ambiente cujos valores são sempre ocultados."
+          }
+        },
+        "store_outputs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep agent outputs in the ledger.",
+          "x-i18n": {
+            "es": "Guardar las salidas de los agentes en el registro.",
+            "pt": "Guardar as saídas dos agentes no registro."
+          }
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 36500,
+          "default": 0,
+          "description": "Delete runs older than this many days on purge; 0 keeps everything.",
+          "x-i18n": {
+            "es": "Borrar con purge las ejecuciones más antiguas que estos días; 0 conserva todo.",
+            "pt": "Apagar com purge as execuções mais antigas que estes dias; 0 mantém tudo."
+          }
+        },
+        "update_check": {
+          "type": "boolean",
+          "default": false,
+          "description": "Let doctor ask PyPI for a newer version. Off by default; nothing else uses the network.",
+          "x-i18n": {
+            "es": "Permitir que doctor consulte PyPI por una versión nueva. Desactivado por defecto; nada más usa la red.",
+            "pt": "Permitir que doctor consulte o PyPI por uma versão nova. Desativado por padrão; nada mais usa a rede."
+          }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "ui",
+      "description": "Local web interface.",
+      "x-i18n": {
+        "es": "Interfaz web local.",
+        "pt": "Interface web local."
+      },
+      "properties": {
+        "host": {
+          "type": "string",
+          "enum": [
+            "127.0.0.1",
+            "localhost",
+            "::1"
+          ],
+          "default": "127.0.0.1",
+          "description": "Loopback address to listen on.",
+          "x-i18n": {
+            "es": "Dirección local en la que escucha.",
+            "pt": "Endereço local em que escuta."
+          }
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 0,
+          "description": "Port; 0 picks a free one.",
+          "x-i18n": {
+            "es": "Puerto; 0 elige uno libre.",
+            "pt": "Porta; 0 escolhe uma livre."
+          }
+        },
+        "open_browser": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the browser on start.",
+          "x-i18n": {
+            "es": "Abrir el navegador al iniciar.",
+            "pt": "Abrir o navegador ao iniciar."
+          }
+        },
+        "theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
+          "default": "auto",
+          "description": "Color theme.",
+          "x-i18n": {
+            "es": "Tema de color.",
+            "pt": "Tema de cor."
+          }
+        },
+        "density": {
+          "type": "string",
+          "enum": [
+            "comfortable",
+            "compact"
+          ],
+          "default": "comfortable",
+          "description": "Spacing of the interface.",
+          "x-i18n": {
+            "es": "Espaciado de la interfaz.",
+            "pt": "Espaçamento da interface."
+          }
+        },
+        "tour": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the guided tour on first visit.",
+          "x-i18n": {
+            "es": "Mostrar el recorrido guiado en la primera visita.",
+            "pt": "Mostrar o tour guiado na primeira visita."
+          }
+        },
+        "shortcuts": {
+          "type": "object",
+          "additionalProperties": false,
+          "x-advanced": true,
+          "description": "Single-key shortcuts.",
+          "x-i18n": {
+            "es": "Atajos de una tecla.",
+            "pt": "Atalhos de uma tecla."
+          },
+          "properties": {
+            "panel": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "p",
+              "description": "Key that opens the panel.",
+              "x-i18n": {
+                "es": "Tecla que abre el panel.",
+                "pt": "Tecla que abre o painel."
+              }
+            },
+            "new": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "n",
+              "description": "Key that opens new task.",
+              "x-i18n": {
+                "es": "Tecla que abre nueva tarea.",
+                "pt": "Tecla que abre nova tarefa."
+              }
+            },
+            "history": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "h",
+              "description": "Key that opens history.",
+              "x-i18n": {
+                "es": "Tecla que abre historial.",
+                "pt": "Tecla que abre histórico."
+              }
+            },
+            "stats": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "s",
+              "description": "Key that opens statistics.",
+              "x-i18n": {
+                "es": "Tecla que abre estadísticas.",
+                "pt": "Tecla que abre estatísticas."
+              }
+            },
+            "routes": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "r",
+              "description": "Key that opens routes.",
+              "x-i18n": {
+                "es": "Tecla que abre rutas.",
+                "pt": "Tecla que abre rotas."
+              }
+            },
+            "setup": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "i",
+              "description": "Key that opens setup.",
+              "x-i18n": {
+                "es": "Tecla que abre configuración inicial.",
+                "pt": "Tecla que abre configuração inicial."
+              }
+            },
+            "settings": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "c",
+              "description": "Key that opens settings.",
+              "x-i18n": {
+                "es": "Tecla que abre ajustes.",
+                "pt": "Tecla que abre ajustes."
+              }
+            },
+            "theme": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "t",
+              "description": "Key that opens theme switch.",
+              "x-i18n": {
+                "es": "Tecla que abre cambio de tema.",
+                "pt": "Tecla que abre troca de tema."
+              }
+            },
+            "language": {
+              "type": "string",
+              "maxLength": 1,
+              "default": "l",
+              "description": "Key that opens language switch.",
+              "x-i18n": {
+                "es": "Tecla que abre cambio de idioma.",
+                "pt": "Tecla que abre troca de idioma."
+              }
+            }
+          }
+        }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "notifications",
+      "description": "Alerts when runs finish.",
+      "x-i18n": {
+        "es": "Avisos cuando terminan las ejecuciones.",
+        "pt": "Avisos quando as execuções terminam."
+      },
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "succeeded",
+            "failed"
+          ],
+          "description": "Which outcomes notify.",
+          "x-i18n": {
+            "es": "Qué resultados avisan.",
+            "pt": "Quais resultados avisam."
+          }
+        },
+        "desktop": {
+          "type": "boolean",
+          "default": false,
+          "description": "Desktop notification.",
+          "x-i18n": {
+            "es": "Notificación de escritorio.",
+            "pt": "Notificação na área de trabalho."
+          }
+        },
+        "sound": {
+          "type": "boolean",
+          "default": false,
+          "description": "Terminal bell.",
+          "x-i18n": {
+            "es": "Campana de la terminal.",
+            "pt": "Sino do terminal."
+          }
+        },
+        "webhook_url": {
+          "type": "string",
+          "default": "",
+          "pattern": "^(|https://.+|http://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?(/.*)?)$",
+          "description": "HTTPS URL that receives a JSON POST (no task text or output, only id, status and diff size).",
+          "x-i18n": {
+            "es": "URL HTTPS que recibe un POST JSON (sin texto de tarea ni salida, solo id, estado y tamaño del diff).",
+            "pt": "URL HTTPS que recebe um POST JSON (sem texto da tarefa nem saída, só id, status e tamanho do diff)."
+          }
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "hooks",
+      "x-advanced": true,
+      "description": "Commands run around each run. Hooks from a project file need timonel trust.",
+      "x-i18n": {
+        "es": "Comandos que se ejecutan alrededor de cada ejecución. Los de un archivo de proyecto necesitan timonel trust.",
+        "pt": "Comandos executados ao redor de cada execução. Os de um arquivo de projeto precisam de timonel trust."
+      },
+      "properties": {
+        "pre_run": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command"
+          },
+          "default": [],
+          "description": "Commands run before each run; a failure stops the run.",
+          "x-i18n": {
+            "es": "Comandos antes de cada ejecución; si uno falla, la ejecución se detiene.",
+            "pt": "Comandos antes de cada execução; se um falhar, a execução para."
+          }
+        },
+        "post_run": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command"
+          },
+          "default": [],
+          "description": "Commands run after a successful run.",
+          "x-i18n": {
+            "es": "Comandos tras una ejecución correcta.",
+            "pt": "Comandos após uma execução bem-sucedida."
+          }
+        },
+        "on_failure": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command"
+          },
+          "default": [],
+          "description": "Commands run after a failed run.",
+          "x-i18n": {
+            "es": "Comandos tras una ejecución fallida.",
+            "pt": "Comandos após uma execução com falha."
+          }
+        },
+        "timeout_s": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600,
+          "default": 120,
+          "description": "Time limit for each hook.",
+          "x-i18n": {
+            "es": "Límite de tiempo de cada gancho.",
+            "pt": "Limite de tempo de cada gancho."
+          }
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "paths",
+      "x-advanced": true,
+      "description": "Where Timonel keeps its data.",
+      "x-i18n": {
+        "es": "Dónde guarda Timonel sus datos.",
+        "pt": "Onde o Timonel guarda seus dados."
+      },
+      "properties": {
+        "data_dir": {
+          "type": "string",
+          "default": "",
+          "description": "Data directory; empty uses the platform default.",
+          "x-i18n": {
+            "es": "Directorio de datos; vacío usa el de la plataforma.",
+            "pt": "Diretório de dados; vazio usa o da plataforma."
+          }
+        },
+        "ledger": {
+          "type": "string",
+          "default": "",
+          "description": "Ledger file; empty uses data_dir/ledger.sqlite.",
+          "x-i18n": {
+            "es": "Archivo del registro; vacío usa data_dir/ledger.sqlite.",
+            "pt": "Arquivo do registro; vazio usa data_dir/ledger.sqlite."
+          }
+        },
+        "cache_dir": {
+          "type": "string",
+          "default": "",
+          "description": "Cache directory for downloaded installer scripts; empty uses data_dir/cache.",
+          "x-i18n": {
+            "es": "Caché de scripts de instalación descargados; vacío usa data_dir/cache.",
+            "pt": "Cache de scripts de instalação baixados; vazio usa data_dir/cache."
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "rung": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent"
+      ],
+      "properties": {
+        "agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "default": ""
+        },
+        "effort": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "ladder": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rung"
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start_offset": {
+          "type": "integer",
+          "minimum": -3,
+          "maximum": 3,
+          "default": 0
+        },
+        "min_tier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 1
+        },
+        "max_tier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 4
+        },
+        "skip_tiers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "default": []
+        },
+        "max_escalations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 10,
+          "default": null
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "then"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "explain",
+                  "edit",
+                  "debug",
+                  "refactor",
+                  "architecture",
+                  "review"
+                ]
+              }
+            },
+            "languages": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "keywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "min_chars": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_chars": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "min_complexity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
+            "max_complexity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          }
+        },
+        "then": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "profile": {
+              "type": "string"
+            },
+            "force": {
+              "type": "string",
+              "pattern": "^[^:]+(:.*)?$"
+            },
+            "min_tier": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
+            "max_tier": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
+            "deny_agents": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "only_agents": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "verify": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/command"
+              }
+            }
+          }
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "string",
+          "default": "*"
+        },
+        "period": {
+          "enum": [
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "max_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "default": null
+        },
+        "max_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "default": null
+        },
+        "max_requests": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "default": null
+        },
+        "action": {
+          "enum": [
+            "skip",
+            "ask",
+            "stop"
+          ],
+          "default": "skip"
+        }
+      }
+    },
+    "heuristics": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-advanced": true,
+      "description": "Deterministic fallback when no model classifies.",
+      "x-i18n": {
+        "es": "Respaldo determinista cuando ningún modelo clasifica.",
+        "pt": "Alternativa determinística quando nenhum modelo classifica."
+      },
+      "properties": {
+        "base_complexity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "explain": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 1,
+              "description": "Starting complexity for 'explain' tasks.",
+              "x-i18n": {
+                "es": "Complejidad inicial de las tareas 'explain'.",
+                "pt": "Complexidade inicial das tarefas 'explain'."
+              }
+            },
+            "review": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2,
+              "description": "Starting complexity for 'review' tasks.",
+              "x-i18n": {
+                "es": "Complejidad inicial de las tareas 'review'.",
+                "pt": "Complexidade inicial das tarefas 'review'."
+              }
+            },
+            "edit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2,
+              "description": "Starting complexity for 'edit' tasks.",
+              "x-i18n": {
+                "es": "Complejidad inicial de las tareas 'edit'.",
+                "pt": "Complexidade inicial das tarefas 'edit'."
+              }
+            },
+            "debug": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2,
+              "description": "Starting complexity for 'debug' tasks.",
+              "x-i18n": {
+                "es": "Complejidad inicial de las tareas 'debug'.",
+                "pt": "Complexidade inicial das tarefas 'debug'."
+              }
+            },
+            "refactor": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 3,
+              "description": "Starting complexity for 'refactor' tasks.",
+              "x-i18n": {
+                "es": "Complejidad inicial de las tareas 'refactor'.",
+                "pt": "Complexidade inicial das tarefas 'refactor'."
+              }
+            },
+            "architecture": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 4,
+              "description": "Starting complexity for 'architecture' tasks.",
+              "x-i18n": {
+                "es": "Complejidad inicial de las tareas 'architecture'.",
+                "pt": "Complexidade inicial das tarefas 'architecture'."
+              }
+            }
+          },
+          "description": "Starting complexity per task kind.",
+          "x-i18n": {
+            "es": "Complejidad inicial por tipo de tarea.",
+            "pt": "Complexidade inicial por tipo de tarefa."
+          }
+        },
+        "long_task_chars": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 400,
+          "description": "Descriptions longer than this count as long.",
+          "x-i18n": {
+            "es": "Las descripciones más largas que esto cuentan como largas.",
+            "pt": "Descrições mais longas que isto contam como longas."
+          }
+        },
+        "long_task_bonus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 1,
+          "description": "Complexity added for long descriptions.",
+          "x-i18n": {
+            "es": "Complejidad sumada a descripciones largas.",
+            "pt": "Complexidade somada a descrições longas."
+          }
+        },
+        "many_files": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "Number of mentioned files that counts as many.",
+          "x-i18n": {
+            "es": "Número de archivos mencionados que cuenta como muchos.",
+            "pt": "Número de arquivos mencionados que conta como muitos."
+          }
+        },
+        "many_files_bonus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 1,
+          "description": "Complexity added when many files are mentioned.",
+          "x-i18n": {
+            "es": "Complejidad sumada cuando se mencionan muchos archivos.",
+            "pt": "Complexidade somada quando muitos arquivos são mencionados."
+          }
+        },
+        "broad_bonus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 1,
+          "description": "Complexity added for broad-scope words.",
+          "x-i18n": {
+            "es": "Complejidad sumada por palabras de alcance amplio.",
+            "pt": "Complexidade somada por palavras de escopo amplo."
+          }
+        },
+        "trivial_penalty": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 1,
+          "description": "Complexity removed for trivial-change words.",
+          "x-i18n": {
+            "es": "Complejidad restada por palabras de cambio trivial.",
+            "pt": "Complexidade subtraída por palavras de mudança trivial."
+          }
+        },
+        "trivial_max_chars": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 200,
+          "description": "Trivial words only count in descriptions shorter than this.",
+          "x-i18n": {
+            "es": "Las palabras triviales solo cuentan en descripciones más cortas que esto.",
+            "pt": "Palavras triviais só contam em descrições mais curtas que isto."
+          }
+        },
+        "high_risk_raises_tier": {
+          "type": "boolean",
+          "default": true,
+          "description": "High-risk tasks below tier 3 start one tier higher.",
+          "x-i18n": {
+            "es": "Las tareas de alto riesgo por debajo del nivel 3 empiezan un nivel más arriba.",
+            "pt": "Tarefas de alto risco abaixo do nível 3 começam um nível acima."
+          }
+        },
+        "keywords": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "review": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Words that mark a 'review' task.",
+              "x-i18n": {
+                "es": "Palabras que marcan una tarea 'review'.",
+                "pt": "Palavras que marcam uma tarefa 'review'."
+              }
+            },
+            "architecture": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Words that mark a 'architecture' task.",
+              "x-i18n": {
+                "es": "Palabras que marcan una tarea 'architecture'.",
+                "pt": "Palavras que marcam uma tarefa 'architecture'."
+              }
+            },
+            "debug": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Words that mark a 'debug' task.",
+              "x-i18n": {
+                "es": "Palabras que marcan una tarea 'debug'.",
+                "pt": "Palavras que marcam uma tarefa 'debug'."
+              }
+            },
+            "refactor": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Words that mark a 'refactor' task.",
+              "x-i18n": {
+                "es": "Palabras que marcan una tarea 'refactor'.",
+                "pt": "Palavras que marcam uma tarefa 'refactor'."
+              }
+            },
+            "explain": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Words that mark a 'explain' task.",
+              "x-i18n": {
+                "es": "Palabras que marcan una tarea 'explain'.",
+                "pt": "Palavras que marcam uma tarefa 'explain'."
+              }
+            }
+          },
+          "description": "Keywords per task kind; the earliest match wins.",
+          "x-i18n": {
+            "es": "Palabras clave por tipo de tarea; gana la primera coincidencia.",
+            "pt": "Palavras-chave por tipo de tarefa; vence a primeira correspondência."
+          }
+        },
+        "broad_words": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Words that mark a broad scope.",
+          "x-i18n": {
+            "es": "Palabras que marcan un alcance amplio.",
+            "pt": "Palavras que marcam um escopo amplo."
+          }
+        },
+        "trivial_words": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Words that mark a trivial change.",
+          "x-i18n": {
+            "es": "Palabras que marcan un cambio trivial.",
+            "pt": "Palavras que marcam uma mudança trivial."
+          }
+        },
+        "risky_words": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Words that mark a high-risk task.",
+          "x-i18n": {
+            "es": "Palabras que marcan una tarea de alto riesgo.",
+            "pt": "Palavras que marcam uma tarefa de alto risco."
+          }
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "kind": {
+          "enum": [
+            "agent",
+            "provider"
+          ],
+          "default": "agent"
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "billing": {
+          "enum": [
+            "subscription",
+            "api"
+          ],
+          "default": "api"
+        },
+        "verified": {
+          "type": "boolean",
+          "default": false
+        },
+        "parser": {
+          "enum": [
+            "text",
+            "json",
+            "stream-json",
+            "jsonl"
+          ],
+          "default": "text"
+        },
+        "json_result_key": {
+          "type": "string",
+          "default": "result"
+        },
+        "json_cost_key": {
+          "type": "string",
+          "default": "total_cost_usd"
+        },
+        "json_error_key": {
+          "type": "string",
+          "default": "is_error"
+        },
+        "prompt_via": {
+          "enum": [
+            "arg",
+            "stdin",
+            "file"
+          ],
+          "default": "arg"
+        },
+        "pty": {
+          "type": "boolean",
+          "default": false
+        },
+        "supports_read_only": {
+          "type": "boolean",
+          "default": true
+        },
+        "base_args": {
+          "$ref": "#/$defs/template"
+        },
+        "read_args": {
+          "$ref": "#/$defs/template"
+        },
+        "write_args": {
+          "$ref": "#/$defs/template"
+        },
+        "model_args": {
+          "$ref": "#/$defs/template"
+        },
+        "effort_args": {
+          "$ref": "#/$defs/template"
+        },
+        "prompt_args": {
+          "$ref": "#/$defs/template"
+        },
+        "dangerous_args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allow_dangerous": {
+          "type": "boolean",
+          "default": false
+        },
+        "env": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "env_from": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        },
+        "env_remove": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "models_command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "known_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model_aliases": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "rate_limit_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "regex"
+          }
+        },
+        "cost_per_attempt_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "price_input_per_mtok_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "price_output_per_mtok_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_timeout_s": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "idle_timeout_s": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "max_concurrent": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64,
+          "default": 4
+        },
+        "detect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "auth": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "auth_ok_pattern": {
+              "type": "string",
+              "format": "regex"
+            },
+            "auth_env": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "api",
+            "base_url"
+          ],
+          "properties": {
+            "api": {
+              "enum": [
+                "openai",
+                "anthropic"
+              ]
+            },
+            "base_url": {
+              "type": "string",
+              "pattern": "^https?://"
+            },
+            "key_env": {
+              "type": "string",
+              "default": ""
+            },
+            "key_required": {
+              "type": "boolean",
+              "default": true
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "timeout_s": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600,
+              "default": 120
+            },
+            "max_tokens": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 2048
+            }
+          }
+        },
+        "meta": {
+          "type": "object"
+        }
+      }
+    },
+    "template": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

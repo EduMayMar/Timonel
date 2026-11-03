@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import fnmatch
 import time
 from collections.abc import Collection, Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
+from pathlib import PurePosixPath
 from typing import Any
 
-from timonel.classify import Classification
-from timonel.config import Config, Profile, Rung
+from timonel.classify import Classification, mentioned_files
+from timonel.config import Config, Profile, Rule, Rung
 from timonel.ledger import RouteStats
 
 BILLING_RANK = {"subscription": 0, "api": 1}
@@ -46,6 +48,8 @@ class Plan:
     skipped: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
     forced: bool = False
+    verify: list[list[str]] | None = None
+    rules: list[str] = field(default_factory=list)
 
     def steps(self) -> list[Step]:
         return [step for ladder in self.ladders for step in ladder]
@@ -62,6 +66,8 @@ class Plan:
             "skipped": self.skipped,
             "reasons": self.reasons,
             "forced": self.forced,
+            "verify": self.verify,
+            "rules": self.rules,
         }
 
     @staticmethod
@@ -77,6 +83,8 @@ class Plan:
             skipped=list(data.get("skipped", [])),
             reasons=list(data.get("reasons", [])),
             forced=bool(data.get("forced", False)),
+            verify=data.get("verify"),
+            rules=list(data.get("rules", [])),
         )
 
 
@@ -84,12 +92,75 @@ def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
-def start_tier(classification: Classification, profile: Profile) -> tuple[int, list[str]]:
+LANGUAGE_EXTENSIONS = {
+    "python": (".py",),
+    "javascript": (".js", ".jsx", ".mjs", ".cjs"),
+    "typescript": (".ts", ".tsx"),
+    "go": (".go",),
+    "rust": (".rs",),
+    "java": (".java",),
+    "kotlin": (".kt", ".kts"),
+    "csharp": (".cs",),
+    "c": (".c", ".h"),
+    "cpp": (".cpp", ".cc", ".hpp", ".cxx"),
+    "ruby": (".rb",),
+    "php": (".php",),
+    "swift": (".swift",),
+    "shell": (".sh", ".bash", ".ps1"),
+    "html": (".html", ".htm"),
+    "css": (".css", ".scss"),
+    "markdown": (".md",),
+    "yaml": (".yaml", ".yml"),
+    "sql": (".sql",),
+}
+
+
+def task_languages(files: list[str], repo_languages: Collection[str] = ()) -> set[str]:
+    found = set(repo_languages)
+    for name in files:
+        suffix = PurePosixPath(name.replace("\\", "/")).suffix.lower()
+        found.update(
+            language for language, suffixes in LANGUAGE_EXTENSIONS.items() if suffix in suffixes
+        )
+    return found
+
+
+def rule_matches(
+    rule: Rule, task: str, classification: Classification, languages: set[str]
+) -> bool:
+    when = rule.when
+    lowered = task.lower()
+    files = mentioned_files(task)
+    checks = [
+        not when.kinds or classification.kind in when.kinds,
+        not when.languages or bool(languages & {item.lower() for item in when.languages}),
+        not when.paths
+        or any(fnmatch.fnmatch(name, pattern) for name in files for pattern in when.paths),
+        not when.keywords or any(word.lower() in lowered for word in when.keywords),
+        when.min_chars is None or len(task) >= when.min_chars,
+        when.max_chars is None or len(task) <= when.max_chars,
+        when.min_complexity is None or classification.complexity >= when.min_complexity,
+        when.max_complexity is None or classification.complexity <= when.max_complexity,
+    ]
+    return all(checks)
+
+
+def denied_model(agent: str, model: str, patterns: tuple[str, ...]) -> bool:
+    return any(
+        fnmatch.fnmatch(model, pattern) or fnmatch.fnmatch(f"{agent}:{model}", pattern)
+        for pattern in patterns
+        if model
+    )
+
+
+def start_tier(
+    classification: Classification, profile: Profile, raise_on_risk: bool = True
+) -> tuple[int, list[str]]:
     reasons = [
         f"complexity {classification.complexity} ({classification.kind}, {classification.source})"
     ]
     tier = classification.complexity
-    if classification.risk == "high" and tier < 3:
+    if raise_on_risk and classification.risk == "high" and tier < 3:
         tier += 1
         reasons.append("high risk raises the starting tier by one")
     if profile.start_offset:
@@ -118,7 +189,11 @@ def order_ladder(
 ) -> tuple[list[Rung], list[str]]:
     def key(item: tuple[int, Rung]) -> tuple[float, ...]:
         index, rung = item
-        billing = BILLING_RANK[config.agents[rung.agent].billing]
+        billing = (
+            BILLING_RANK[config.agents[rung.agent].billing]
+            if config.routing.prefer_subscription
+            else 0
+        )
         if not adaptive:
             return (billing, index)
         found = stats.get((tier, rung.agent, rung.model))
@@ -153,29 +228,77 @@ def build_plan(
     config: Config,
     classification: Classification,
     *,
-    profile_name: str = "balanced",
+    profile_name: str | None = None,
     available: Collection[str] | None = None,
     cooldowns: Mapping[str, float] | None = None,
     route_stats: list[RouteStats] | None = None,
     force: Rung | None = None,
     now: float | None = None,
+    task: str = "",
+    repo_languages: Collection[str] = (),
 ) -> Plan:
-    if profile_name not in config.profiles:
+    chosen_profile = profile_name or config.default_profile
+    languages = task_languages(mentioned_files(task), repo_languages)
+    matched = [
+        rule for rule in config.routing.rules if rule_matches(rule, task, classification, languages)
+    ]
+    deny = set(config.routing.deny_agents)
+    only: set[str] | None = None
+    min_tier, max_tier = 1, 4
+    verify: list[list[str]] | None = None
+    reasons_from_rules: list[str] = []
+    for rule in matched:
+        then = rule.then
+        label = rule.name or "rule"
+        reasons_from_rules.append(f"rule '{label}' matched")
+        if then.profile:
+            chosen_profile = then.profile
+        if then.force and force is None:
+            force = parse_force(then.force)
+        if then.min_tier:
+            min_tier = max(min_tier, then.min_tier)
+        if then.max_tier:
+            max_tier = min(max_tier, then.max_tier)
+        deny.update(then.deny_agents)
+        if then.only_agents:
+            only = set(then.only_agents) if only is None else only & set(then.only_agents)
+        if then.verify is not None:
+            verify = [list(command) for command in then.verify]
+    if chosen_profile not in config.profiles:
         raise RoutingError(
-            f"unknown profile {profile_name!r}; choose {', '.join(sorted(config.profiles))}"
+            f"unknown profile {chosen_profile!r}; choose {', '.join(sorted(config.profiles))}"
         )
-    profile = config.profiles[profile_name]
+    base_profile = config.profiles[chosen_profile]
+    profile = replace(
+        base_profile,
+        min_tier=max(base_profile.min_tier, min_tier),
+        max_tier=max(max(base_profile.min_tier, min_tier), min(base_profile.max_tier, max_tier)),
+    )
+    write = classification.needs_write and classification.kind in config.execution.write_kinds
     moment = time.time() if now is None else now
-    usable = set(config.agents) if available is None else set(available)
+    usable = {
+        name
+        for name in (set(config.agents) if available is None else set(available))
+        if name in config.agents
+        and config.agents[name].enabled
+        and config.agents[name].kind == "agent"
+        and name not in deny
+        and (only is None or name in only)
+        and (write or config.agents[name].supports_read_only)
+    }
     cooling = {agent: until for agent, until in (cooldowns or {}).items() if until > moment}
     max_escalations = (
         profile.max_escalations
         if profile.max_escalations is not None
-        else config.execution.max_escalations
+        else config.escalation.max_escalations
     )
+    review_min_tier = config.review.min_tier if config.review.enabled else 5
     if force is not None:
-        if force.agent not in config.agents:
+        agent = config.agents.get(force.agent)
+        if agent is None or agent.kind != "agent":
             raise RoutingError(f"unknown agent {force.agent!r}")
+        if not write and not agent.supports_read_only:
+            raise RoutingError(f"{force.agent} cannot run read-only tasks safely")
         tier = clamp(classification.complexity, 1, 4)
         effort = force.effort or next(
             (
@@ -186,21 +309,24 @@ def build_plan(
             ),
             "",
         )
-        step = Step(
-            tier, force.agent, force.model, effort, config.agents[force.agent].billing, "forced"
-        )
+        step = Step(tier, force.agent, force.model, effort, agent.billing, "forced")
         return Plan(
             classification=classification,
             profile=profile.name,
             start_tier=tier,
             ladders=[[step]],
-            write=classification.needs_write,
+            write=write,
             max_escalations=0,
-            review_min_tier=config.execution.review_min_tier,
-            reasons=[f"forced to {step.label}"],
+            review_min_tier=review_min_tier,
+            reasons=[*reasons_from_rules, f"forced to {step.label}"],
             forced=True,
+            verify=verify,
+            rules=[rule.name for rule in matched],
         )
-    first, reasons = start_tier(classification, profile)
+    first, reasons = start_tier(
+        classification, profile, config.classifier.heuristics.high_risk_raises_tier
+    )
+    reasons = [*reasons_from_rules, *reasons]
     stats = {
         (item.tier, item.agent, item.model): item
         for item in route_stats or []
@@ -208,7 +334,9 @@ def build_plan(
     }
     skipped: list[str] = []
     ladders: list[list[Step]] = []
-    for tier in list(range(first, profile.max_tier + 1)) + list(range(first - 1, 0, -1)):
+    for tier in list(range(first, profile.max_tier + 1)) + list(
+        range(first - 1, profile.min_tier - 1, -1)
+    ):
         if tier in profile.skip_tiers:
             skipped.append(f"tier {tier}: skipped by profile '{profile.name}'")
             continue
@@ -218,8 +346,10 @@ def build_plan(
         for rung in config.tiers.get(tier, ()):
             if rung.agent not in usable:
                 skipped.append(
-                    f"tier {tier}: {rung.label} unavailable (not installed or not authenticated)"
+                    f"tier {tier}: {rung.label} unavailable (disabled, denied, not installed or not authenticated)"
                 )
+            elif denied_model(rung.agent, rung.model, config.routing.deny_models):
+                skipped.append(f"tier {tier}: {rung.label} model denied by routing.deny_models")
             elif rung.agent in cooling:
                 skipped.append(f"tier {tier}: {rung.label} cooling down after a usage limit")
             else:
@@ -242,10 +372,11 @@ def build_plan(
         raise RoutingError("no usable agent for this task; run 'timonel doctor'")
     ladders = ladders[: max_escalations + 1]
     head = ladders[0][0]
+    order_note = "subscriptions first" if config.routing.prefer_subscription else "configured order"
     reasons.append(
-        f"start at tier {ladders[0][0].tier} with {head.label} ({head.billing}; subscriptions first)"
+        f"start at tier {ladders[0][0].tier} with {head.label} ({head.billing}; {order_note})"
     )
-    if classification.needs_write:
+    if write:
         reasons.append("needs write access: runs in an isolated git worktree")
     else:
         reasons.append("read-only task: runs in place with read-only permissions")
@@ -254,11 +385,13 @@ def build_plan(
         profile=profile.name,
         start_tier=ladders[0][0].tier,
         ladders=ladders,
-        write=classification.needs_write,
+        write=write,
         max_escalations=max_escalations,
-        review_min_tier=config.execution.review_min_tier,
+        review_min_tier=review_min_tier,
         skipped=skipped,
         reasons=reasons,
+        verify=verify,
+        rules=[rule.name for rule in matched],
     )
 
 

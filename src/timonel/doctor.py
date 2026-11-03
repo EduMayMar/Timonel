@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 import tempfile
@@ -177,11 +178,8 @@ def inspect_agent(
     if smoke and auth != "missing":
         smoke_ok, smoke_detail = smoke_test(agent, config, source)
     problems = []
-    if agent.pty and os.name == "nt":
-        try:
-            import winpty  # noqa: F401
-        except ImportError:
-            problems.append("pywinpty is required for this agent on Windows")
+    if agent.pty and os.name == "nt" and importlib.util.find_spec("winpty") is None:
+        problems.append("pywinpty is required for this agent on Windows")
     return AgentHealth(
         name=agent.name,
         command=agent.command,

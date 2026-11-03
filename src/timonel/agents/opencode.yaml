@@ -1,0 +1,28 @@
+name: opencode
+kind: agent
+title: OpenCode
+vendor: SST
+homepage: https://opencode.ai/docs
+verification: {status: verified, version: 1.19.5, date: "2026-11-03", source: "opencode --help; opencode run --help (agent names plan/build unverified)"}
+install:
+  approx_size_mb: 205
+  npm: ["npm", "install", "-g", "opencode-ai"]
+  pnpm: ["pnpm", "add", "-g", "opencode-ai"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "opencode-ai"], pnpm: ["pnpm", "remove", "-g", "opencode-ai"]}
+  drift: {npm: "opencode-ai", help: [["run", "--help"]]}
+login: {command: ["opencode", "auth", "login"], flow: interactive}
+agent:
+  enabled: false
+  command: opencode
+  billing: api
+  parser: text
+  prompt_via: arg
+  base_args: ["run"]
+  read_args: ["--agent", "plan"]
+  write_args: ["--agent", "build"]
+  model_args: ["--model", "{model}"]
+  effort_args: ["--variant", "{effort}"]
+  prompt_args: ["{prompt}"]
+  dangerous_args: ["--auto"]
+  models_command: ["models"]
+  detect: {version: ["--version"], auth: ["auth", "list"]}

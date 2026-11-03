@@ -697,7 +697,7 @@ def test_resume_uses_stored_verification_and_refuses_parents(fakes: Fakes, repo:
     run_id = engine.start(options)
     engine.ledger.update_run(
         run_id,
-        plan={**plan.to_dict(), "verify": [list(CHECK_GOOD[0])]},
+        plan={**plan.to_dict(), "verify_commands": [list(CHECK_GOOD[0])]},
         status="interrupted",
         write=True,
     )

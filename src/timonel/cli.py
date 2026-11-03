@@ -443,6 +443,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"timonel {__version__}")
     parser.add_argument("--config", help="routes.yaml to use (default: user config dir)")
+    parser.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="override one option for this command",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     doctor = sub.add_parser("doctor", help="detect installed and authenticated agents")
@@ -529,6 +536,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def current_repo(path: str) -> Path | None:
+    try:
+        return gitops.repo_root(Path(path))
+    except GitError:
+        return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     os.environ.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
     for stream in (sys.stdout, sys.stderr):
@@ -537,7 +551,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     try:
-        config = load_config(Path(args.config) if args.config else None)
+        config = load_config(
+            Path(args.config) if args.config else None,
+            repo=current_repo(getattr(args, "repo", ".")),
+            overrides=args.set,
+        )
         return int(args.handler(args, config))
     except ConfigError as error:
         errors.print("[red]invalid configuration[/]")

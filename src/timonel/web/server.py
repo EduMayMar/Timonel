@@ -95,7 +95,7 @@ def plan_from_client(data: Any, config: Config) -> Plan:
         ladders=ladders,
         write=item.needs_write,
         max_escalations=len(ladders) - 1,
-        review_min_tier=config.execution.review_min_tier,
+        review_min_tier=config.review.min_tier,
         reasons=["route edited in the web UI"],
     )
 

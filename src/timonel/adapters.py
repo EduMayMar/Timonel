@@ -22,6 +22,7 @@ class Invocation:
     env: dict[str, str]
     stdin: str | None
     pty: bool
+    prompt_file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,10 +47,12 @@ def render_argv(
     write: bool,
     timeout_s: int,
     dangerous: bool = False,
+    prompt_file: str = "",
 ) -> list[str]:
     values = {
         "prompt": prompt,
-        "model": rung.model,
+        "prompt_file": prompt_file,
+        "model": agent.model_name(rung.model),
         "effort": rung.effort,
         "timeout_s": str(timeout_s),
     }
@@ -85,11 +88,21 @@ def secret_sources(agents: Mapping[str, Agent]) -> set[str]:
     return {source for agent in agents.values() for source in agent.env_from.values()}
 
 
+def denied(name: str, patterns: tuple[str, ...]) -> bool:
+    return any(re.fullmatch(pattern, name, re.IGNORECASE) for pattern in patterns)
+
+
 def build_env(
-    agent: Agent, agents: Mapping[str, Agent], environ: Mapping[str, str] | None = None
+    agent: Agent,
+    agents: Mapping[str, Agent],
+    environ: Mapping[str, str] | None = None,
+    deny: tuple[str, ...] = (),
 ) -> dict[str, str]:
     source = dict(os.environ if environ is None else environ)
-    env = {key: value for key, value in source.items() if key not in secret_sources(agents)}
+    blocked = secret_sources(agents)
+    env = {
+        key: value for key, value in source.items() if key not in blocked and not denied(key, deny)
+    }
     for name in agent.env_remove:
         env.pop(name, None)
     env.update(agent.env)
@@ -115,14 +128,23 @@ def build_invocation(
     timeout_s: int,
     dangerous: bool = False,
     environ: Mapping[str, str] | None = None,
+    prompt_file: str = "",
+    deny: tuple[str, ...] = (),
 ) -> Invocation:
     return Invocation(
         argv=render_argv(
-            agent, rung, prompt, write=write, timeout_s=timeout_s, dangerous=dangerous
+            agent,
+            rung,
+            prompt,
+            write=write,
+            timeout_s=timeout_s,
+            dangerous=dangerous,
+            prompt_file=prompt_file,
         ),
-        env=build_env(agent, agents, environ),
+        env=build_env(agent, agents, environ, deny),
         stdin=prompt if agent.prompt_via == "stdin" else None,
         pty=agent.pty,
+        prompt_file=prompt_file or None,
     )
 
 
@@ -149,27 +171,37 @@ def usage_tokens(payload: Mapping[str, Any]) -> tuple[int | None, int | None]:
     return as_int(usage.get("input_tokens")), as_int(usage.get("output_tokens"))
 
 
-def parse_json_result(payload: Any, raw: str) -> AgentOutput:
+def parse_json_result(
+    payload: Any,
+    raw: str,
+    result_key: str = "result",
+    cost_key: str = "total_cost_usd",
+    error_key: str = "is_error",
+) -> AgentOutput:
     if not isinstance(payload, dict):
         return AgentOutput(text=raw, cost_usd=None, is_error=True, parsed=False)
-    result = payload.get("result")
+    result = payload.get(result_key)
     tokens_in, tokens_out = usage_tokens(payload)
     return AgentOutput(
         text=result if isinstance(result, str) else raw,
-        cost_usd=as_float(payload.get("total_cost_usd")),
-        is_error=bool(payload.get("is_error")) or payload.get("subtype") not in (None, "success"),
+        cost_usd=as_float(payload.get(cost_key)),
+        is_error=bool(payload.get(error_key)) or payload.get("subtype") not in (None, "success"),
         parsed=isinstance(result, str),
         tokens_in=tokens_in,
         tokens_out=tokens_out,
     )
 
 
-def parse_json(raw: str) -> AgentOutput:
+def parse_json(raw: str, agent: Agent | None = None) -> AgentOutput:
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
         return AgentOutput(text=raw, cost_usd=None, is_error=False, parsed=False)
-    return parse_json_result(payload, raw)
+    if agent is None:
+        return parse_json_result(payload, raw)
+    return parse_json_result(
+        payload, raw, agent.json_result_key, agent.json_cost_key, agent.json_error_key
+    )
 
 
 def json_lines(raw: str) -> list[dict[str, Any]]:
@@ -233,7 +265,7 @@ def parse_jsonl(raw: str) -> AgentOutput:
 def parse_output(agent: Agent, raw: str) -> AgentOutput:
     clean = strip_ansi(raw)
     if agent.parser == "json":
-        return parse_json(clean.strip())
+        return parse_json(clean.strip(), agent)
     if agent.parser == "stream-json":
         return parse_stream_json(clean)
     if agent.parser == "jsonl":

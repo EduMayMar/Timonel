@@ -1,0 +1,27 @@
+name: codex
+kind: agent
+title: Codex CLI
+vendor: OpenAI
+homepage: https://developers.openai.com/codex
+verification: {status: verified, version: 0.166.0, date: "2026-11-03", source: "codex exec --help; Codex non-interactive guide (effort key unverified)"}
+install:
+  approx_size_mb: 440
+  npm: ["npm", "install", "-g", "@openai/codex"]
+  pnpm: ["pnpm", "add", "-g", "@openai/codex"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@openai/codex"], pnpm: ["pnpm", "remove", "-g", "@openai/codex"]}
+  drift: {npm: "@openai/codex", help: [["exec", "--help"]]}
+login: {command: ["codex", "login"], flow: browser}
+agent:
+  command: codex
+  billing: subscription
+  parser: jsonl
+  prompt_via: stdin
+  base_args: ["exec", "--json", "--color", "never", "--ephemeral"]
+  read_args: ["--sandbox", "read-only"]
+  write_args: ["--sandbox", "workspace-write"]
+  model_args: ["--model", "{model}"]
+  effort_args: ["-c", "model_reasoning_effort=\"{effort}\""]
+  prompt_args: ["-"]
+  dangerous_args: ["--dangerously-bypass-approvals-and-sandbox"]
+  detect: {version: ["--version"], auth: ["login", "status"]}
+  rate_limit_patterns: ["usage limit", "Rate limit reached"]

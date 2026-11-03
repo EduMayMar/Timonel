@@ -18,7 +18,8 @@ def test_doctor_detects_fakes(fakes: Fakes) -> None:
     assert report["deepseek"].auth == "ok"
     assert report["agy"].models == ("fake-pro", "fake-flash")
     assert report["claude"].models == ("fable", "opus", "sonnet")
-    assert all(item.usable for item in report.values())
+    assert all(report[name].usable for name in ("claude", "codex", "copilot", "agy", "deepseek"))
+    assert not report["gemini"].installed
 
 
 def test_doctor_reports_missing_and_unauthenticated(fakes: Fakes) -> None:

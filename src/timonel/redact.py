@@ -23,18 +23,28 @@ PATTERNS = tuple(
 )
 
 
-def secret_values(environ: Mapping[str, str] | None = None, extra: Iterable[str] = ()) -> list[str]:
+def secret_values(
+    environ: Mapping[str, str] | None = None,
+    extra: Iterable[str] = (),
+    names: re.Pattern[str] = SECRET_NAME,
+) -> list[str]:
     source = os.environ if environ is None else environ
-    values = {
-        value for name, value in source.items() if SECRET_NAME.search(name) and len(value) >= 8
-    }
+    values = {value for name, value in source.items() if names.search(name) and len(value) >= 8}
     values.update(value for value in extra if len(value) >= 8)
     return sorted(values, key=len, reverse=True)
 
 
 class Redactor:
-    def __init__(self, environ: Mapping[str, str] | None = None, extra: Iterable[str] = ()) -> None:
-        self.values = secret_values(environ, extra)
+    def __init__(
+        self,
+        environ: Mapping[str, str] | None = None,
+        extra: Iterable[str] = (),
+        patterns: Iterable[str] = (),
+        secret_names: str | None = None,
+    ) -> None:
+        names = re.compile(secret_names, re.IGNORECASE) if secret_names else SECRET_NAME
+        self.values = secret_values(environ, extra, names)
+        self.patterns = (*PATTERNS, *(re.compile(pattern) for pattern in patterns))
 
     def add(self, value: str) -> None:
         if len(value) >= 8 and value not in self.values:
@@ -43,7 +53,7 @@ class Redactor:
     def __call__(self, text: str) -> str:
         for value in self.values:
             text = text.replace(value, MASK)
-        for pattern in PATTERNS:
+        for pattern in self.patterns:
             text = pattern.sub(MASK, text)
         return text
 

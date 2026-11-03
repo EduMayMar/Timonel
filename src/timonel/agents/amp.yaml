@@ -1,0 +1,24 @@
+name: amp
+kind: agent
+title: Amp
+vendor: Sourcegraph
+homepage: https://ampcode.com/manual
+verification: {status: verified, version: 0.0.1793707234, date: "2026-11-03", source: "amp --help (npm package @ampcode/cli)"}
+install:
+  approx_size_mb: 155
+  npm: ["npm", "install", "-g", "@ampcode/cli"]
+  pnpm: ["pnpm", "add", "-g", "@ampcode/cli"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@ampcode/cli"], pnpm: ["pnpm", "remove", "-g", "@ampcode/cli"]}
+  drift: {npm: "@ampcode/cli", help: [["--help"]]}
+login: {command: ["amp", "login"], flow: browser}
+api_key: {env: AMP_API_KEY, url: "https://ampcode.com/settings/security#access-token"}
+agent:
+  enabled: false
+  command: amp
+  billing: api
+  parser: stream-json
+  prompt_via: stdin
+  supports_read_only: false
+  base_args: ["--execute", "--stream-json", "--no-color", "--no-notifications", "--no-ide"]
+  effort_args: ["--mode", "{effort}"]
+  detect: {version: ["--version"], auth_env: [AMP_API_KEY]}

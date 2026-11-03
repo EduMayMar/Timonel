@@ -1,0 +1,16 @@
+name: goose
+kind: agent
+title: goose
+vendor: Block
+homepage: https://github.com/block/goose
+verification: {status: unverified, date: "2026-11-03", source: "third-party cheat sheets only; official docs were not reachable"}
+agent:
+  enabled: false
+  command: goose
+  billing: api
+  parser: text
+  prompt_via: arg
+  supports_read_only: false
+  base_args: ["run"]
+  prompt_args: ["--text", "{prompt}"]
+  detect: {version: ["--version"]}

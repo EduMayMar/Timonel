@@ -1,19 +1,27 @@
 from __future__ import annotations
 
+import copy
+import dataclasses
+import hashlib
+import json
 import os
 import re
+import types
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, Union, cast, get_args, get_origin, get_type_hints
 
 import yaml
 
+from timonel import schema
+
 Billing = Literal["subscription", "api"]
 ParserKind = Literal["text", "json", "stream-json", "jsonl"]
-PromptVia = Literal["arg", "stdin"]
+PromptVia = Literal["arg", "stdin", "file"]
+Layer = Literal["default", "user", "project", "env", "cli"]
 
-PLACEHOLDERS = frozenset({"prompt", "model", "effort", "timeout_s"})
+PLACEHOLDERS = frozenset({"prompt", "prompt_file", "model", "effort", "timeout_s"})
 PLACEHOLDER_RE = re.compile(r"\{([a-z_]+)\}")
 DANGEROUS_MARKERS = (
     "--dangerously",
@@ -22,22 +30,22 @@ DANGEROUS_MARKERS = (
     "bypasspermissions",
     "approval_policy=never",
     "--allow-tool=shell",
+    "--skip-permissions",
+    "--yes-always",
 )
 DANGEROUS_EXACT = frozenset({"--allow-all", "--allow-all-paths", "--allow-all-urls"})
-ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 TIERS = (1, 2, 3, 4)
-EXECUTION_FIELDS = frozenset(
-    {
-        "max_escalations",
-        "review_min_tier",
-        "cooldown_minutes",
-        "total_timeout_s",
-        "idle_timeout_s",
-        "verify",
-        "verify_timeout_s",
-        "verify_env",
-    }
-)
+LAYERS: tuple[Layer, ...] = ("default", "user", "project", "env", "cli")
+ENV_PREFIX = "TIMONEL_"
+PROJECT_FILE = ".timonel.yaml"
+LEGACY_EXECUTION = {
+    "verify": ("verification", "commands"),
+    "verify_timeout_s": ("verification", "timeout_s"),
+    "verify_env": ("verification", "env_allow"),
+    "review_min_tier": ("review", "min_tier"),
+    "max_escalations": ("escalation", "max_escalations"),
+    "cooldown_minutes": ("escalation", "cooldown_minutes"),
+}
 
 
 class ConfigError(Exception):
@@ -55,14 +63,31 @@ class Detect:
 
 
 @dataclass(frozen=True)
+class Provider:
+    api: Literal["openai", "anthropic"]
+    base_url: str
+    key_env: str = ""
+    key_required: bool = True
+    headers: dict[str, str] = field(default_factory=dict)
+    timeout_s: int = 120
+    max_tokens: int = 2048
+
+
+@dataclass(frozen=True)
 class Agent:
     name: str
     command: str
-    billing: Billing
-    parser: ParserKind
+    billing: Billing = "api"
+    parser: ParserKind = "text"
+    kind: Literal["agent", "provider"] = "agent"
+    enabled: bool = True
     verified: bool = False
+    json_result_key: str = "result"
+    json_cost_key: str = "total_cost_usd"
+    json_error_key: str = "is_error"
     prompt_via: PromptVia = "arg"
     pty: bool = False
+    supports_read_only: bool = True
     base_args: tuple[str, ...] = ()
     read_args: tuple[str, ...] = ()
     write_args: tuple[str, ...] = ()
@@ -76,9 +101,20 @@ class Agent:
     env_remove: tuple[str, ...] = ()
     models_command: tuple[str, ...] = ()
     known_models: tuple[str, ...] = ()
+    model_aliases: dict[str, str] = field(default_factory=dict)
     rate_limit_patterns: tuple[str, ...] = ()
     cost_per_attempt_usd: float | None = None
+    price_input_per_mtok_usd: float | None = None
+    price_output_per_mtok_usd: float | None = None
+    total_timeout_s: int | None = None
+    idle_timeout_s: int | None = None
+    max_concurrent: int = 4
     detect: Detect = field(default_factory=Detect)
+    provider: Provider | None = None
+    meta: dict[str, Any] = field(default_factory=dict)
+
+    def model_name(self, model: str) -> str:
+        return self.model_aliases.get(model, model)
 
 
 @dataclass(frozen=True)
@@ -94,7 +130,7 @@ class Rung:
 
 @dataclass(frozen=True)
 class Profile:
-    name: str
+    name: str = ""
     start_offset: int = 0
     min_tier: int = 1
     max_tier: int = 4
@@ -103,15 +139,150 @@ class Profile:
 
 
 @dataclass(frozen=True)
-class Execution:
+class RuleWhen:
+    kinds: tuple[str, ...] = ()
+    languages: tuple[str, ...] = ()
+    paths: tuple[str, ...] = ()
+    keywords: tuple[str, ...] = ()
+    min_chars: int | None = None
+    max_chars: int | None = None
+    min_complexity: int | None = None
+    max_complexity: int | None = None
+
+
+@dataclass(frozen=True)
+class RuleThen:
+    profile: str | None = None
+    force: str | None = None
+    min_tier: int | None = None
+    max_tier: int | None = None
+    deny_agents: tuple[str, ...] = ()
+    only_agents: tuple[str, ...] = ()
+    verify: tuple[tuple[str, ...], ...] | None = None
+
+
+@dataclass(frozen=True)
+class Rule:
+    then: RuleThen = field(default_factory=RuleThen)
+    when: RuleWhen = field(default_factory=RuleWhen)
+    name: str = ""
+
+
+@dataclass(frozen=True)
+class Routing:
+    prefer_subscription: bool = True
+    deny_agents: tuple[str, ...] = ()
+    deny_models: tuple[str, ...] = ()
+    rules: tuple[Rule, ...] = ()
+
+
+@dataclass(frozen=True)
+class BaseComplexity:
+    explain: int = 1
+    review: int = 2
+    edit: int = 2
+    debug: int = 2
+    refactor: int = 3
+    architecture: int = 4
+
+
+@dataclass(frozen=True)
+class Keywords:
+    review: tuple[str, ...] = ()
+    architecture: tuple[str, ...] = ()
+    debug: tuple[str, ...] = ()
+    refactor: tuple[str, ...] = ()
+    explain: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Heuristics:
+    base_complexity: BaseComplexity = field(default_factory=BaseComplexity)
+    long_task_chars: int = 400
+    long_task_bonus: int = 1
+    many_files: int = 3
+    many_files_bonus: int = 1
+    broad_bonus: int = 1
+    trivial_penalty: int = 1
+    trivial_max_chars: int = 200
+    high_risk_raises_tier: bool = True
+    keywords: Keywords = field(default_factory=Keywords)
+    broad_words: tuple[str, ...] = ()
+    trivial_words: tuple[str, ...] = ()
+    risky_words: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ClassifierSettings:
+    use_model: bool = True
+    ladder: tuple[Rung, ...] = ()
+    retries: int = 0
+    on_failure: Literal["heuristic", "fail"] = "heuristic"
+    prompt_template: str = ""
+    heuristics: Heuristics = field(default_factory=Heuristics)
+
+
+@dataclass(frozen=True)
+class PlannerSettings:
+    ladder: tuple[Rung, ...] = ()
+    prompt_template: str = ""
+
+
+@dataclass(frozen=True)
+class ReviewSettings:
+    enabled: bool = True
+    min_tier: int = 3
+    reviewers: tuple[Rung, ...] = ()
+    max_reviewers_tried: int = 3
+    strictness: Literal["lenient", "normal", "strict"] = "normal"
+    max_rounds: int = 1
+    on_no_verdict: Literal["approve", "reject"] = "approve"
+    diff_chars: int = 60000
+    prompt_template: str = ""
+
+
+@dataclass(frozen=True)
+class Escalation:
     max_escalations: int = 2
-    review_min_tier: int = 3
+    on_verify_failure: Literal["next_tier", "next_rung"] = "next_tier"
+    on_agent_failure: Literal["next_rung", "next_tier"] = "next_rung"
+    context_chars: int = 4000
+    context_attempts: int = 2
     cooldown_minutes: int = 30
+    reset_between_attempts: bool = True
+
+
+@dataclass(frozen=True)
+class Detector:
+    file: str
+    command: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Verification:
+    commands: tuple[tuple[str, ...], ...] = ()
+    autodetect: bool = False
+    detectors: tuple[Detector, ...] = ()
+    timeout_s: int = 900
+    success_exit_codes: tuple[int, ...] = (0,)
+    env_allow: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Execution:
     total_timeout_s: int = 1800
     idle_timeout_s: int = 300
-    verify: tuple[tuple[str, ...], ...] = ()
-    verify_timeout_s: int = 900
-    verify_env: tuple[str, ...] = ()
+    orphan_grace_s: float = 2.0
+    worktree_dir: str = ""
+    branch_pattern: str = "timonel/{id}"
+    base_ref: str = "HEAD"
+    cleanup_on_apply: bool = True
+    write_kinds: tuple[str, ...] = ("edit", "debug", "refactor", "architecture")
+    agent_env_deny: tuple[str, ...] = ()
+    max_output_chars: int = 4000000
+    stored_output_chars: int = 200000
+    max_parallel_runs: int = 2
+    race_contenders: int = 2
 
 
 @dataclass(frozen=True)
@@ -123,8 +294,85 @@ class Adaptive:
 @dataclass(frozen=True)
 class Decompose:
     auto: bool = False
+    min_complexity: int = 4
     max_subtasks: int = 6
     max_parallel: int = 3
+
+
+@dataclass(frozen=True)
+class Budget:
+    period: Literal["day", "week", "month"]
+    name: str = ""
+    agent: str = "*"
+    max_usd: float | None = None
+    max_tokens: int | None = None
+    max_requests: int | None = None
+    action: Literal["skip", "ask", "stop"] = "skip"
+
+
+@dataclass(frozen=True)
+class Privacy:
+    log_level: str = "warning"
+    log_file: str = ""
+    redact_patterns: tuple[str, ...] = ()
+    secret_env_names: str = "(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH)"
+    store_outputs: bool = True
+    retention_days: int = 0
+    update_check: bool = False
+
+
+@dataclass(frozen=True)
+class Shortcuts:
+    panel: str = "p"
+    new: str = "n"
+    history: str = "h"
+    stats: str = "s"
+    routes: str = "r"
+    setup: str = "i"
+    settings: str = "c"
+    theme: str = "t"
+    language: str = "l"
+
+
+@dataclass(frozen=True)
+class UiSettings:
+    host: str = "127.0.0.1"
+    port: int = 0
+    open_browser: bool = True
+    theme: str = "auto"
+    density: str = "comfortable"
+    tour: bool = True
+    shortcuts: Shortcuts = field(default_factory=Shortcuts)
+
+
+@dataclass(frozen=True)
+class Notifications:
+    events: tuple[str, ...] = ("succeeded", "failed")
+    desktop: bool = False
+    sound: bool = False
+    webhook_url: str = ""
+
+
+@dataclass(frozen=True)
+class Hooks:
+    pre_run: tuple[tuple[str, ...], ...] = ()
+    post_run: tuple[tuple[str, ...], ...] = ()
+    on_failure: tuple[tuple[str, ...], ...] = ()
+    timeout_s: int = 120
+
+
+@dataclass(frozen=True)
+class Paths:
+    data_dir: str = ""
+    ledger: str = ""
+    cache_dir: str = ""
+
+
+@dataclass(frozen=True)
+class ProjectState:
+    path: Path | None = None
+    trusted: bool = False
+    digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -132,15 +380,34 @@ class Config:
     agents: dict[str, Agent]
     tiers: dict[int, tuple[Rung, ...]]
     profiles: dict[str, Profile]
-    classifier: tuple[Rung, ...]
-    planner: tuple[Rung, ...]
-    reviewer: tuple[Rung, ...]
-    rate_limit_patterns: tuple[str, ...]
-    execution: Execution
-    adaptive: Adaptive
-    decompose: Decompose
+    version: int = 1
+    mode: str = "simple"
+    language: str = "auto"
+    default_profile: str = "balanced"
+    rate_limit_patterns: tuple[str, ...] = ()
+    routing: Routing = field(default_factory=Routing)
+    classifier: ClassifierSettings = field(default_factory=ClassifierSettings)
+    planner: PlannerSettings = field(default_factory=PlannerSettings)
+    review: ReviewSettings = field(default_factory=ReviewSettings)
+    escalation: Escalation = field(default_factory=Escalation)
+    verification: Verification = field(default_factory=Verification)
+    execution: Execution = field(default_factory=Execution)
+    adaptive: Adaptive = field(default_factory=Adaptive)
+    decompose: Decompose = field(default_factory=Decompose)
+    budgets: tuple[Budget, ...] = ()
+    privacy: Privacy = field(default_factory=Privacy)
+    ui: UiSettings = field(default_factory=UiSettings)
+    notifications: Notifications = field(default_factory=Notifications)
+    hooks: Hooks = field(default_factory=Hooks)
+    paths: Paths = field(default_factory=Paths)
     source: Path | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    origins: dict[str, Layer] = field(default_factory=dict)
+    layers: dict[str, dict[str, Any]] = field(default_factory=dict)
+    project: ProjectState = field(default_factory=ProjectState)
+
+    def usable_agents(self) -> dict[str, Agent]:
+        return {name: agent for name, agent in self.agents.items() if agent.enabled}
 
 
 Mark = tuple[str, int]
@@ -164,11 +431,21 @@ def user_config_path() -> Path:
     return user_config_dir() / "routes.yaml"
 
 
+def user_agents_dir() -> Path:
+    return user_config_dir() / "agents"
+
+
+def trust_store_path() -> Path:
+    return user_config_dir() / "trusted-projects.json"
+
+
 def collect_marks(node: yaml.Node, filename: str, path: tuple[str, ...], marks: Marks) -> None:
-    marks[path] = (filename, node.start_mark.line + 1)
+    marks.setdefault(path, (filename, node.start_mark.line + 1))
     if isinstance(node, yaml.MappingNode):
         for key_node, value_node in node.value:
-            collect_marks(value_node, filename, (*path, str(key_node.value)), marks)
+            child = (*path, str(key_node.value))
+            marks[child] = (filename, key_node.start_mark.line + 1)
+            collect_marks(value_node, filename, child, marks)
     elif isinstance(node, yaml.SequenceNode):
         for index, item in enumerate(node.value):
             collect_marks(item, filename, (*path, str(index)), marks)
@@ -188,7 +465,15 @@ def parse_yaml(text: str, filename: str) -> tuple[dict[str, Any], Marks]:
         return {}, marks
     if not isinstance(data, dict):
         raise ConfigError([f"{filename}:1: top level must be a mapping"])
-    return data, marks
+    return stringify_keys(data), marks
+
+
+def stringify_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): stringify_keys(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [stringify_keys(item) for item in value]
+    return value
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -197,94 +482,300 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
         if isinstance(value, dict) and isinstance(merged.get(key), dict) and key != "tiers":
             merged[key] = deep_merge(merged[key], value)
         else:
-            merged[key] = value
+            merged[key] = copy.deepcopy(value)
     return merged
 
 
-class Validator:
+def flatten(data: Any, path: tuple[str, ...] = ()) -> dict[tuple[str, ...], Any]:
+    if isinstance(data, dict) and data and path != ("tiers",):
+        result: dict[tuple[str, ...], Any] = {}
+        for key, value in data.items():
+            result.update(flatten(value, (*path, str(key))))
+        return result
+    return {path: data} if path else {}
+
+
+def migrate(data: dict[str, Any], marks: Marks | None = None) -> dict[str, Any]:
+    data = copy.deepcopy(data)
+    moves: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    execution = data.get("execution")
+    if isinstance(execution, dict):
+        for old, (section, key) in LEGACY_EXECUTION.items():
+            if old in execution:
+                data.setdefault(section, {})
+                if isinstance(data[section], dict):
+                    data[section].setdefault(key, execution.pop(old))
+                    moves.append((("execution", old), (section, key)))
+    for old, (section, key) in {
+        "classifier": ("classifier", "ladder"),
+        "planner": ("planner", "ladder"),
+        "reviewer": ("review", "reviewers"),
+    }.items():
+        if isinstance(data.get(old), list):
+            ladder = data.pop(old)
+            data.setdefault(section, {})
+            if isinstance(data[section], dict):
+                data[section][key] = ladder
+                moves.append(((old,), (section, key)))
+    if marks is not None:
+        for source, target in moves:
+            for path, mark in list(marks.items()):
+                if path[: len(source)] == source:
+                    marks[(*target, *path[len(source) :])] = mark
+    return data
+
+
+def registry_files() -> list[tuple[str, str]]:
+    package = resources.files("timonel").joinpath("agents")
+    found = [
+        (f"agents/{entry.name}", entry.read_text(encoding="utf-8"))
+        for entry in sorted(package.iterdir(), key=lambda item: item.name)
+        if entry.name.endswith(".yaml")
+    ]
+    user_dir = user_agents_dir()
+    if user_dir.is_dir():
+        found.extend(
+            (str(path), path.read_text(encoding="utf-8"))
+            for path in sorted(user_dir.glob("*.yaml"))
+        )
+    return found
+
+
+CONNECTOR_KEYS = frozenset(
+    {
+        "name",
+        "kind",
+        "title",
+        "vendor",
+        "homepage",
+        "verification",
+        "install",
+        "login",
+        "api_key",
+        "agent",
+        "provider",
+        "description",
+    }
+)
+
+
+def connector_to_agent(data: dict[str, Any], filename: str) -> tuple[str, dict[str, Any]]:
+    problems = [
+        f"{filename}: unknown connector field {key!r}" for key in data if key not in CONNECTOR_KEYS
+    ]
+    name = data.get("name")
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
+        problems.append(f"{filename}: name must be lowercase letters, digits, - or _")
+    agent = data.get("agent")
+    if not isinstance(agent, dict):
+        problems.append(f"{filename}: agent section is required")
+    if problems:
+        raise ConfigError(problems)
+    entry = dict(cast(dict[str, Any], agent))
+    entry["kind"] = data.get("kind", "agent")
+    if "provider" in data:
+        entry["provider"] = data["provider"]
+    status = (data.get("verification") or {}).get("status")
+    entry.setdefault("verified", status == "verified")
+    entry["meta"] = {
+        key: data[key]
+        for key in (
+            "title",
+            "vendor",
+            "homepage",
+            "verification",
+            "install",
+            "login",
+            "api_key",
+            "description",
+        )
+        if key in data
+    }
+    return cast(str, name), entry
+
+
+def load_registry() -> dict[str, Any]:
+    agents: dict[str, Any] = {}
+    for filename, text in registry_files():
+        data, _ = parse_yaml(text, filename)
+        name, entry = connector_to_agent(data, filename)
+        agents[name] = deep_merge(agents.get(name, {}), entry)
+    return agents
+
+
+def default_layer() -> tuple[dict[str, Any], Marks]:
+    routes, marks = parse_yaml(default_text(), "default_routes.yaml")
+    base = deep_merge(schema.defaults(), {"agents": load_registry()})
+    return deep_merge(base, migrate(routes)), marks
+
+
+def env_layer(environ: dict[str, str]) -> dict[str, Any]:
+    top = set(schema.load_schema()["properties"])
+    layer: dict[str, Any] = {}
+    for name, raw in sorted(environ.items()):
+        if not name.startswith(ENV_PREFIX):
+            continue
+        path = [part.lower() for part in name[len(ENV_PREFIX) :].split("__") if part]
+        if not path or path[0] not in top:
+            continue
+        set_path(layer, path, parse_scalar(raw))
+    return layer
+
+
+def parse_scalar(raw: str) -> Any:
+    try:
+        return yaml.safe_load(raw) if raw.strip() else ""
+    except yaml.YAMLError:
+        return raw
+
+
+def set_path(data: dict[str, Any], path: list[str], value: Any) -> None:
+    target = data
+    for part in path[:-1]:
+        child = target.get(part)
+        if not isinstance(child, dict):
+            child = {}
+            target[part] = child
+        target = child
+    target[path[-1]] = value
+
+
+def get_path(data: Any, path: list[str]) -> Any:
+    for part in path:
+        if isinstance(data, dict) and part in data:
+            data = data[part]
+        elif isinstance(data, list) and part.isdigit() and int(part) < len(data):
+            data = data[int(part)]
+        else:
+            raise KeyError(".".join(path))
+    return data
+
+
+def unset_path(data: dict[str, Any], path: list[str]) -> bool:
+    target: Any = data
+    for part in path[:-1]:
+        if not isinstance(target, dict) or part not in target:
+            return False
+        target = target[part]
+    if isinstance(target, dict) and path[-1] in target:
+        del target[path[-1]]
+        return True
+    return False
+
+
+def overrides_layer(assignments: list[str]) -> dict[str, Any]:
+    layer: dict[str, Any] = {}
+    for assignment in assignments:
+        key, separator, raw = assignment.partition("=")
+        if not separator or not key.strip():
+            raise ConfigError([f"--set {assignment!r}: use key=value"])
+        set_path(layer, key.strip().split("."), parse_scalar(raw))
+    return layer
+
+
+def file_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def read_trust_store() -> dict[str, str]:
+    path = trust_store_path()
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {str(key): str(value) for key, value in data.items()} if isinstance(data, dict) else {}
+
+
+def write_trust_store(store: dict[str, str]) -> None:
+    path = trust_store_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(store, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def project_file(repo: Path | None) -> Path | None:
+    if repo is None:
+        return None
+    candidate = repo / PROJECT_FILE
+    return candidate if candidate.is_file() else None
+
+
+def project_state(repo: Path | None) -> ProjectState:
+    path = project_file(repo)
+    if path is None:
+        return ProjectState()
+    digest = file_digest(path)
+    trusted = read_trust_store().get(str(path.resolve())) == digest
+    return ProjectState(path=path, trusted=trusted, digest=digest)
+
+
+def trust_project(path: Path) -> str:
+    store = read_trust_store()
+    digest = file_digest(path)
+    store[str(path.resolve())] = digest
+    write_trust_store(store)
+    return digest
+
+
+def revoke_project(path: Path) -> bool:
+    store = read_trust_store()
+    removed = store.pop(str(path.resolve()), None) is not None
+    write_trust_store(store)
+    return removed
+
+
+def is_dangerous(token: str) -> bool:
+    lowered = token.lower()
+    return token in DANGEROUS_EXACT or any(marker in lowered for marker in DANGEROUS_MARKERS)
+
+
+def where(marks: Marks, path: tuple[str, ...]) -> str:
+    probe = path
+    while probe and probe not in marks:
+        probe = probe[:-1]
+    filename, line = marks.get(probe, ("routes.yaml", 0))
+    return f"{filename}:{line}"
+
+
+def convert(kind: Any, value: Any) -> Any:
+    origin = get_origin(kind)
+    args = get_args(kind)
+    if origin in (Union, types.UnionType):
+        if value is None:
+            return None
+        inner = [arg for arg in args if arg is not type(None)]
+        return convert(inner[0], value)
+    if dataclasses.is_dataclass(kind) and isinstance(value, dict):
+        return build(cast(type, kind), value)
+    if origin is tuple and isinstance(value, list | tuple):
+        item = args[0]
+        return tuple(convert(item, element) for element in value)
+    if origin is frozenset:
+        return frozenset(value or ())
+    if origin is dict and isinstance(value, dict):
+        return {key: convert(args[1], item) for key, item in value.items()}
+    if kind is float and isinstance(value, int):
+        return float(value)
+    return value
+
+
+def build(cls: type, data: dict[str, Any], **extra: Any) -> Any:
+    hints = get_type_hints(cls)
+    names = {item.name for item in dataclasses.fields(cls)}
+    values = {key: convert(hints[key], value) for key, value in data.items() if key in names}
+    return cls(**{**values, **extra})
+
+
+class Checker:
     def __init__(self, marks: Marks) -> None:
         self.marks = marks
         self.problems: list[str] = []
 
-    def where(self, path: tuple[str, ...]) -> str:
-        probe = path
-        while probe and probe not in self.marks:
-            probe = probe[:-1]
-        filename, line = self.marks.get(probe, ("routes.yaml", 0))
-        return f"{filename}:{line}"
-
     def fail(self, path: tuple[str, ...], message: str) -> None:
-        self.problems.append(f"{self.where(path)}: {'.'.join(path) or '<root>'}: {message}")
+        self.problems.append(f"{where(self.marks, path)}: {'.'.join(path) or '<root>'}: {message}")
 
-    def mapping(self, value: Any, path: tuple[str, ...]) -> dict[str, Any]:
-        if value is None:
-            return {}
-        if not isinstance(value, dict):
-            self.fail(path, f"expected a mapping, got {type(value).__name__}")
-            return {}
-        return value
-
-    def string(self, value: Any, path: tuple[str, ...], default: str = "") -> str:
-        if value is None:
-            return default
-        if isinstance(value, bool) or not isinstance(value, str | int | float):
-            self.fail(path, f"expected a string, got {type(value).__name__}")
-            return default
-        return str(value)
-
-    def boolean(self, value: Any, path: tuple[str, ...], default: bool) -> bool:
-        if value is None:
-            return default
-        if not isinstance(value, bool):
-            self.fail(path, f"expected true or false, got {value!r}")
-            return default
-        return value
-
-    def integer(self, value: Any, path: tuple[str, ...], default: int, low: int, high: int) -> int:
-        if value is None:
-            return default
-        if isinstance(value, bool) or not isinstance(value, int):
-            self.fail(path, f"expected an integer, got {value!r}")
-            return default
-        if not low <= value <= high:
-            self.fail(path, f"must be between {low} and {high}, got {value}")
-            return default
-        return value
-
-    def number(self, value: Any, path: tuple[str, ...]) -> float | None:
-        if value is None:
-            return None
-        if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
-            self.fail(path, f"expected a non-negative number, got {value!r}")
-            return None
-        return float(value)
-
-    def choice(
-        self, value: Any, path: tuple[str, ...], options: tuple[str, ...], default: str
-    ) -> str:
-        if value is None:
-            return default
-        if value not in options:
-            self.fail(path, f"expected one of {', '.join(options)}, got {value!r}")
-            return default
-        return str(value)
-
-    def strings(self, value: Any, path: tuple[str, ...]) -> tuple[str, ...]:
-        if value is None:
-            return ()
-        if not isinstance(value, list):
-            self.fail(path, f"expected a list of strings, got {type(value).__name__}")
-            return ()
-        result = []
-        for index, item in enumerate(value):
-            if isinstance(item, bool) or not isinstance(item, str | int | float):
-                self.fail((*path, str(index)), f"expected a string, got {item!r}")
-            else:
-                result.append(str(item))
-        return tuple(result)
-
-    def template(self, value: Any, path: tuple[str, ...]) -> tuple[str, ...]:
-        tokens = self.strings(value, path)
+    def template(self, tokens: list[str], path: tuple[str, ...]) -> None:
         for index, token in enumerate(tokens):
             for name in PLACEHOLDER_RE.findall(token):
                 if name not in PLACEHOLDERS:
@@ -294,334 +785,215 @@ class Validator:
                 self.fail(
                     (*path, str(index)), f"{token!r} bypasses safety; move it to dangerous_args"
                 )
-        return tokens
 
-    def env_map(self, value: Any, path: tuple[str, ...]) -> dict[str, str]:
-        result: dict[str, str] = {}
-        for key, item in self.mapping(value, path).items():
-            if not ENV_NAME_RE.match(str(key)):
-                self.fail((*path, str(key)), "invalid environment variable name")
-                continue
-            result[str(key)] = self.string(item, (*path, str(key)))
-        return result
+    def agent(self, name: str, data: dict[str, Any]) -> None:
+        path = ("agents", name)
+        if not data.get("command"):
+            self.fail((*path, "command"), "is required")
+        for group in (
+            "base_args",
+            "read_args",
+            "write_args",
+            "model_args",
+            "effort_args",
+            "prompt_args",
+        ):
+            self.template(list(data.get(group) or []), (*path, group))
+        prompt_args = list(data.get("prompt_args") or [])
+        via = data.get("prompt_via", "arg")
+        uses = {name for token in prompt_args for name in PLACEHOLDER_RE.findall(token)}
+        if data.get("kind", "agent") == "agent":
+            if via == "arg" and "prompt" not in uses:
+                self.fail(
+                    (*path, "prompt_args"), "prompt_via is 'arg' but no token contains {prompt}"
+                )
+            if via == "file" and "prompt_file" not in uses:
+                self.fail(
+                    (*path, "prompt_args"),
+                    "prompt_via is 'file' but no token contains {prompt_file}",
+                )
+            if via == "stdin" and uses & {"prompt", "prompt_file"}:
+                self.fail(
+                    (*path, "prompt_args"), "prompt_via is 'stdin' so {prompt} must not appear"
+                )
+            if data.get("pty") and via == "stdin":
+                self.fail((*path, "pty"), "a pseudo-terminal agent needs prompt_via: arg")
+        elif not isinstance(data.get("provider"), dict):
+            self.fail((*path, "provider"), "a provider connector needs a provider section")
 
-    def regexes(self, value: Any, path: tuple[str, ...]) -> tuple[str, ...]:
-        patterns = self.strings(value, path)
-        for index, pattern in enumerate(patterns):
-            try:
-                re.compile(pattern)
-            except re.error as error:
-                self.fail((*path, str(index)), f"invalid regular expression: {error}")
-        return patterns
-
-
-def is_dangerous(token: str) -> bool:
-    lowered = token.lower()
-    return token in DANGEROUS_EXACT or any(marker in lowered for marker in DANGEROUS_MARKERS)
-
-
-def build_agent(name: str, raw: Any, check: Validator) -> Agent | None:
-    path = ("agents", name)
-    data = check.mapping(raw, path)
-    command = check.string(data.get("command"), (*path, "command"))
-    if not command:
-        check.fail((*path, "command"), "is required")
-        return None
-    known = {
-        "command",
-        "billing",
-        "parser",
-        "verified",
-        "prompt_via",
-        "pty",
-        "base_args",
-        "read_args",
-        "write_args",
-        "model_args",
-        "effort_args",
-        "prompt_args",
-        "dangerous_args",
-        "allow_dangerous",
-        "env",
-        "env_from",
-        "env_remove",
-        "models_command",
-        "known_models",
-        "rate_limit_patterns",
-        "cost_per_attempt_usd",
-        "detect",
-    }
-    for key in data:
-        if key not in known:
-            check.fail((*path, str(key)), "unknown field")
-    detect_raw = check.mapping(data.get("detect"), (*path, "detect"))
-    detect = Detect(
-        version=check.strings(detect_raw.get("version"), (*path, "detect", "version"))
-        or ("--version",),
-        auth=check.strings(detect_raw.get("auth"), (*path, "detect", "auth")),
-        auth_ok_pattern=check.string(
-            detect_raw.get("auth_ok_pattern"), (*path, "detect", "auth_ok_pattern")
-        ),
-        auth_env=check.strings(detect_raw.get("auth_env"), (*path, "detect", "auth_env")),
-    )
-    env_from = check.env_map(data.get("env_from"), (*path, "env_from"))
-    for target, source in env_from.items():
-        if not ENV_NAME_RE.match(source):
-            check.fail((*path, "env_from", target), "source must be an environment variable name")
-    prompt_args = check.template(data.get("prompt_args"), (*path, "prompt_args"))
-    prompt_via = cast(
-        PromptVia,
-        check.choice(data.get("prompt_via"), (*path, "prompt_via"), ("arg", "stdin"), "arg"),
-    )
-    if prompt_via == "arg" and not any("{prompt}" in token for token in prompt_args):
-        check.fail((*path, "prompt_args"), "prompt_via is 'arg' but no token contains {prompt}")
-    if prompt_via == "stdin" and any("{prompt}" in token for token in prompt_args):
-        check.fail((*path, "prompt_args"), "prompt_via is 'stdin' so {prompt} must not appear")
-    pty = check.boolean(data.get("pty"), (*path, "pty"), False)
-    if pty and prompt_via == "stdin":
-        check.fail((*path, "pty"), "a pseudo-terminal agent needs prompt_via: arg")
-    return Agent(
-        name=name,
-        command=command,
-        billing=cast(
-            Billing,
-            check.choice(data.get("billing"), (*path, "billing"), ("subscription", "api"), "api"),
-        ),
-        parser=cast(
-            ParserKind,
-            check.choice(
-                data.get("parser"),
-                (*path, "parser"),
-                ("text", "json", "stream-json", "jsonl"),
-                "text",
-            ),
-        ),
-        verified=check.boolean(data.get("verified"), (*path, "verified"), False),
-        prompt_via=prompt_via,
-        pty=pty,
-        base_args=check.template(data.get("base_args"), (*path, "base_args")),
-        read_args=check.template(data.get("read_args"), (*path, "read_args")),
-        write_args=check.template(data.get("write_args"), (*path, "write_args")),
-        model_args=check.template(data.get("model_args"), (*path, "model_args")),
-        effort_args=check.template(data.get("effort_args"), (*path, "effort_args")),
-        prompt_args=prompt_args,
-        dangerous_args=check.strings(data.get("dangerous_args"), (*path, "dangerous_args")),
-        allow_dangerous=check.boolean(
-            data.get("allow_dangerous"), (*path, "allow_dangerous"), False
-        ),
-        env=check.env_map(data.get("env"), (*path, "env")),
-        env_from=env_from,
-        env_remove=check.strings(data.get("env_remove"), (*path, "env_remove")),
-        models_command=check.strings(data.get("models_command"), (*path, "models_command")),
-        known_models=check.strings(data.get("known_models"), (*path, "known_models")),
-        rate_limit_patterns=check.regexes(
-            data.get("rate_limit_patterns"), (*path, "rate_limit_patterns")
-        ),
-        cost_per_attempt_usd=check.number(
-            data.get("cost_per_attempt_usd"), (*path, "cost_per_attempt_usd")
-        ),
-        detect=detect,
-    )
+    def ladder(
+        self, ladder: Any, path: tuple[str, ...], agents: dict[str, Any], providers_ok: bool
+    ) -> None:
+        for index, rung in enumerate(ladder or []):
+            name = rung.get("agent") if isinstance(rung, dict) else None
+            item = (*path, str(index), "agent")
+            if name not in agents:
+                hint = schema.suggestion(str(name), sorted(agents))
+                self.fail(item, f"unknown agent {name!r}{hint}")
+            elif not providers_ok and agents[name].get("kind") == "provider":
+                self.fail(item, f"{name!r} is an API provider; tiers need agents that edit code")
 
 
-def build_ladder(
-    raw: Any, path: tuple[str, ...], agents: dict[str, Any], check: Validator
-) -> tuple[Rung, ...]:
-    if raw is None:
-        return ()
-    if not isinstance(raw, list):
-        check.fail(path, "expected a list of {agent, model, effort}")
-        return ()
-    rungs = []
-    for index, item in enumerate(raw):
-        item_path = (*path, str(index))
-        data = check.mapping(item, item_path)
-        agent = check.string(data.get("agent"), (*item_path, "agent"))
-        if agent not in agents:
-            check.fail(
-                (*item_path, "agent"),
-                f"unknown agent {agent!r}; defined: {', '.join(sorted(agents))}",
-            )
-            continue
-        for key in data:
-            if key not in ("agent", "model", "effort"):
-                check.fail((*item_path, str(key)), "unknown field")
-        rungs.append(
-            Rung(
-                agent=agent,
-                model=check.string(data.get("model"), (*item_path, "model")),
-                effort=check.string(data.get("effort"), (*item_path, "effort")),
-            )
-        )
-    return tuple(rungs)
-
-
-def build_profile(name: str, raw: Any, check: Validator) -> Profile:
-    path = ("profiles", name)
-    data = check.mapping(raw, path)
-    for key in data:
-        if key not in ("start_offset", "min_tier", "max_tier", "skip_tiers", "max_escalations"):
-            check.fail((*path, str(key)), "unknown field")
-    skip_raw = data.get("skip_tiers") or []
-    skip: set[int] = set()
-    if not isinstance(skip_raw, list):
-        check.fail((*path, "skip_tiers"), "expected a list of tiers")
-    else:
-        for index, tier in enumerate(skip_raw):
-            skip.add(check.integer(tier, (*path, "skip_tiers", str(index)), 0, 1, 4))
-    max_escalations = data.get("max_escalations")
-    min_tier = check.integer(data.get("min_tier"), (*path, "min_tier"), 1, 1, 4)
-    max_tier = check.integer(data.get("max_tier"), (*path, "max_tier"), 4, 1, 4)
-    if min_tier > max_tier:
-        check.fail((*path, "min_tier"), f"min_tier {min_tier} is above max_tier {max_tier}")
-    return Profile(
-        name=name,
-        start_offset=check.integer(data.get("start_offset"), (*path, "start_offset"), 0, -3, 3),
-        min_tier=min_tier,
-        max_tier=max_tier,
-        skip_tiers=frozenset(skip - {0}),
-        max_escalations=None
-        if max_escalations is None
-        else check.integer(max_escalations, (*path, "max_escalations"), 0, 0, 10),
-    )
-
-
-def build_execution(raw: Any, check: Validator) -> Execution:
-    path = ("execution",)
-    data = check.mapping(raw, path)
-    for key in data:
-        if key not in EXECUTION_FIELDS:
-            check.fail((*path, str(key)), "unknown field")
-    verify_env = check.strings(data.get("verify_env"), (*path, "verify_env"))
-    for index, name in enumerate(verify_env):
-        if not ENV_NAME_RE.match(name):
-            check.fail((*path, "verify_env", str(index)), "invalid environment variable name")
-    verify_raw = data.get("verify") or []
-    verify: list[tuple[str, ...]] = []
-    if not isinstance(verify_raw, list):
-        check.fail((*path, "verify"), "expected a list of commands (each a list of arguments)")
-    else:
-        for index, command in enumerate(verify_raw):
-            argv = check.strings(command, (*path, "verify", str(index)))
-            if not argv:
-                check.fail((*path, "verify", str(index)), "command must be a non-empty list")
-            verify.append(argv)
-    return Execution(
-        max_escalations=check.integer(
-            data.get("max_escalations"), (*path, "max_escalations"), 2, 0, 10
-        ),
-        review_min_tier=check.integer(
-            data.get("review_min_tier"), (*path, "review_min_tier"), 3, 1, 5
-        ),
-        cooldown_minutes=check.integer(
-            data.get("cooldown_minutes"), (*path, "cooldown_minutes"), 30, 0, 24 * 60
-        ),
-        total_timeout_s=check.integer(
-            data.get("total_timeout_s"), (*path, "total_timeout_s"), 1800, 1, 86400
-        ),
-        idle_timeout_s=check.integer(
-            data.get("idle_timeout_s"), (*path, "idle_timeout_s"), 300, 1, 86400
-        ),
-        verify=tuple(command for command in verify if command),
-        verify_timeout_s=check.integer(
-            data.get("verify_timeout_s"), (*path, "verify_timeout_s"), 900, 1, 86400
-        ),
-        verify_env=verify_env,
-    )
-
-
-def build_config(data: dict[str, Any], marks: Marks, source: Path | None) -> Config:
-    check = Validator(marks)
-    known = {
-        "version",
-        "agents",
-        "rate_limit_patterns",
-        "tiers",
-        "classifier",
-        "planner",
-        "reviewer",
-        "profiles",
-        "execution",
-        "adaptive",
-        "decompose",
-    }
-    for key in data:
-        if key not in known:
-            check.fail((str(key),), "unknown field")
-    if data.get("version", 1) != 1:
-        check.fail(("version",), "only version 1 is supported")
-    agents_raw = check.mapping(data.get("agents"), ("agents",))
-    agents = {
-        str(name): agent
-        for name, raw in agents_raw.items()
-        if (agent := build_agent(str(name), raw, check)) is not None
-    }
-    tiers_raw = check.mapping(data.get("tiers"), ("tiers",))
-    tiers: dict[int, tuple[Rung, ...]] = {}
-    for key, ladder in tiers_raw.items():
-        try:
-            tier = int(key)
-        except (TypeError, ValueError):
-            tier = 0
-        if tier not in TIERS:
-            check.fail(("tiers", str(key)), "tier must be 1, 2, 3 or 4")
-            continue
-        tiers[tier] = build_ladder(ladder, ("tiers", str(key)), agents_raw, check)
+def check_config(data: dict[str, Any], marks: Marks) -> list[str]:
+    checker = Checker(marks)
+    for problem in schema.validate(data):
+        checker.fail(problem.path, problem.message)
+    if checker.problems:
+        return checker.problems
+    agents = data.get("agents", {})
+    for name, agent in agents.items():
+        checker.agent(name, agent)
+    tiers = data.get("tiers") or {}
+    for tier, ladder in tiers.items():
+        checker.ladder(ladder, ("tiers", tier), agents, providers_ok=False)
     if not any(tiers.values()):
-        check.fail(("tiers",), "at least one tier needs a non-empty ladder")
-    profiles_raw = check.mapping(data.get("profiles"), ("profiles",))
+        checker.fail(("tiers",), "at least one tier needs a non-empty ladder")
+    checker.ladder(data.get("classifier", {}).get("ladder"), ("classifier", "ladder"), agents, True)
+    checker.ladder(data.get("planner", {}).get("ladder"), ("planner", "ladder"), agents, True)
+    checker.ladder(data.get("review", {}).get("reviewers"), ("review", "reviewers"), agents, True)
+    for name, profile in (data.get("profiles") or {}).items():
+        if profile.get("min_tier", 1) > profile.get("max_tier", 4):
+            checker.fail(
+                ("profiles", name, "min_tier"),
+                f"min_tier {profile['min_tier']} is above max_tier {profile['max_tier']}",
+            )
+    if (
+        data.get("default_profile") not in (data.get("profiles") or {})
+        and data.get("default_profile") != "balanced"
+    ):
+        hint = schema.suggestion(
+            str(data.get("default_profile")), sorted(data.get("profiles") or {})
+        )
+        checker.fail(("default_profile",), f"unknown profile {data.get('default_profile')!r}{hint}")
+    for index, rule in enumerate(data.get("routing", {}).get("rules", [])):
+        profile = rule.get("then", {}).get("profile")
+        if profile is not None and profile not in (data.get("profiles") or {}):
+            checker.fail(
+                ("routing", "rules", str(index), "then", "profile"), f"unknown profile {profile!r}"
+            )
+    return checker.problems
+
+
+def materialize(
+    data: dict[str, Any],
+    marks: Marks,
+    source: Path | None,
+    origins: dict[str, Layer],
+    layers: dict[str, dict[str, Any]],
+    project: ProjectState,
+) -> Config:
+    problems = check_config(data, marks)
+    if problems:
+        raise ConfigError(problems)
+    agents = {name: build(Agent, entry, name=name) for name, entry in data["agents"].items()}
+    tiers = {
+        int(tier): tuple(build(Rung, rung) for rung in ladder)
+        for tier, ladder in data["tiers"].items()
+    }
     profiles = {
-        str(name): build_profile(str(name), raw, check) for name, raw in profiles_raw.items()
+        name: build(Profile, value, name=name)
+        for name, value in (data.get("profiles") or {}).items()
     }
     profiles.setdefault("balanced", Profile(name="balanced"))
-    adaptive_raw = check.mapping(data.get("adaptive"), ("adaptive",))
-    decompose_raw = check.mapping(data.get("decompose"), ("decompose",))
-    config = Config(
-        agents=agents,
-        tiers=tiers,
-        profiles=profiles,
-        classifier=build_ladder(data.get("classifier"), ("classifier",), agents_raw, check),
-        planner=build_ladder(data.get("planner"), ("planner",), agents_raw, check),
-        reviewer=build_ladder(data.get("reviewer"), ("reviewer",), agents_raw, check),
-        rate_limit_patterns=check.regexes(
-            data.get("rate_limit_patterns"), ("rate_limit_patterns",)
+    rest = {key: value for key, value in data.items() if key not in ("agents", "tiers", "profiles")}
+    return cast(
+        Config,
+        build(
+            Config,
+            rest,
+            agents=agents,
+            tiers=tiers,
+            profiles=profiles,
+            source=source,
+            raw=data,
+            origins=origins,
+            layers=layers,
+            project=project,
         ),
-        execution=build_execution(data.get("execution"), check),
-        adaptive=Adaptive(
-            enabled=check.boolean(adaptive_raw.get("enabled"), ("adaptive", "enabled"), True),
-            min_samples=check.integer(
-                adaptive_raw.get("min_samples"), ("adaptive", "min_samples"), 5, 1, 10000
-            ),
-        ),
-        decompose=Decompose(
-            auto=check.boolean(decompose_raw.get("auto"), ("decompose", "auto"), False),
-            max_subtasks=check.integer(
-                decompose_raw.get("max_subtasks"), ("decompose", "max_subtasks"), 6, 2, 20
-            ),
-            max_parallel=check.integer(
-                decompose_raw.get("max_parallel"), ("decompose", "max_parallel"), 3, 1, 16
-            ),
-        ),
-        source=source,
-        raw=data,
     )
-    if check.problems:
-        raise ConfigError(check.problems)
-    return config
 
 
-def load_config(path: Path | None = None) -> Config:
-    defaults, marks = parse_yaml(default_text(), "default_routes.yaml")
+def compose(layers: list[tuple[Layer, dict[str, Any]]]) -> tuple[dict[str, Any], dict[str, Layer]]:
+    merged: dict[str, Any] = {}
+    origins: dict[str, Layer] = {}
+    for layer, data in layers:
+        merged = deep_merge(merged, data)
+        for path in flatten(data):
+            origins[".".join(path)] = layer
+    return merged, origins
+
+
+def load_config(
+    path: Path | None = None,
+    *,
+    repo: Path | None = None,
+    overrides: list[str] | None = None,
+    environ: dict[str, str] | None = None,
+) -> Config:
+    defaults, marks = default_layer()
     target = path if path is not None else user_config_path()
     if path is not None and not target.is_file():
         raise ConfigError([f"{target}: file not found"])
-    if not target.is_file():
-        return build_config(defaults, marks, None)
-    user_data, user_marks = parse_yaml(target.read_text(encoding="utf-8"), str(target))
-    return build_config(deep_merge(defaults, user_data), {**marks, **user_marks}, target)
+    user: dict[str, Any] = {}
+    if target.is_file():
+        user_raw, user_marks = parse_yaml(target.read_text(encoding="utf-8"), str(target))
+        user = migrate(user_raw, user_marks)
+        marks = {**marks, **user_marks}
+    project = project_state(repo)
+    project_data: dict[str, Any] = {}
+    if project.path is not None and project.trusted:
+        project_raw, project_marks = parse_yaml(
+            project.path.read_text(encoding="utf-8"), str(project.path)
+        )
+        project_data = migrate(project_raw, project_marks)
+        marks = {**marks, **project_marks}
+    env = env_layer(dict(os.environ if environ is None else environ))
+    cli = overrides_layer(overrides or [])
+    ordered: list[tuple[Layer, dict[str, Any]]] = [
+        ("default", defaults),
+        ("user", user),
+        ("project", project_data),
+        ("env", env),
+        ("cli", cli),
+    ]
+    merged, origins = compose(ordered)
+    return materialize(
+        merged, marks, target if target.is_file() else None, origins, dict(ordered), project
+    )
 
 
 def validate_text(text: str, filename: str = "routes.yaml") -> Config:
-    defaults, marks = parse_yaml(default_text(), "default_routes.yaml")
-    user_data, user_marks = parse_yaml(text, filename)
-    return build_config(deep_merge(defaults, user_data), {**marks, **user_marks}, None)
+    defaults, marks = default_layer()
+    user_raw, user_marks = parse_yaml(text, filename)
+    user = migrate(user_raw, user_marks)
+    ordered: list[tuple[Layer, dict[str, Any]]] = [("default", defaults), ("user", user)]
+    merged, origins = compose(ordered)
+    return materialize(
+        merged, {**marks, **user_marks}, None, origins, dict(ordered), ProjectState()
+    )
+
+
+def project_commands(data: dict[str, Any]) -> list[str]:
+    found: list[str] = []
+    for command in data.get("verification", {}).get("commands", []) or []:
+        found.append("verify: " + " ".join(map(str, command)))
+    for hook in ("pre_run", "post_run", "on_failure"):
+        for command in data.get("hooks", {}).get(hook, []) or []:
+            found.append(f"hook {hook}: " + " ".join(map(str, command)))
+    for name, agent in (data.get("agents") or {}).items():
+        if isinstance(agent, dict) and any(
+            key in agent
+            for key in (
+                "command",
+                "base_args",
+                "write_args",
+                "env",
+                "dangerous_args",
+                "allow_dangerous",
+            )
+        ):
+            found.append(f"agent {name}: changes how the agent is launched")
+    for index, rule in enumerate(data.get("routing", {}).get("rules", []) or []):
+        for command in (rule.get("then", {}) or {}).get("verify", []) or []:
+            found.append(f"rule {index} verify: " + " ".join(map(str, command)))
+    return found

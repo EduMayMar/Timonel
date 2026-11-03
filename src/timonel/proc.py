@@ -269,10 +269,11 @@ def wait_exit(handle: Handle, grace_s: float) -> int | None:
     return code
 
 
-def remember(captured: list[str], line: str, size: int) -> int:
+def remember(captured: list[str], line: str, size: int, limit: int | None = None) -> int:
     captured.append(line)
     size += len(line)
-    while size > MAX_CAPTURE and len(captured) > 1:
+    cap = MAX_CAPTURE if limit is None else limit
+    while size > cap and len(captured) > 1:
         size -= len(captured.pop(0))
     return size
 
@@ -286,7 +287,10 @@ def pump_until_done(
     idle_timeout_s: float,
     cancel: threading.Event | None,
     on_line: OnLine | None,
+    max_capture: int | None = None,
+    orphan_grace_s: float | None = None,
 ) -> str:
+    grace = ORPHAN_GRACE_S if orphan_grace_s is None else orphan_grace_s
     size = 0
     last_activity = started
     exited_at: float | None = None
@@ -300,12 +304,12 @@ def pump_until_done(
             return "finished"
         if line:
             last_activity = now
-            size = remember(captured, line, size)
+            size = remember(captured, line, size, max_capture)
             if on_line is not None:
                 on_line(line)
         elif exited_at is None and handle.poll() is not None:
             exited_at = now
-        elif exited_at is not None and now - max(exited_at, last_activity) > ORPHAN_GRACE_S:
+        elif exited_at is not None and now - max(exited_at, last_activity) > grace:
             return "finished"
         if cancel is not None and cancel.is_set():
             return "cancelled"
@@ -327,6 +331,8 @@ def run_process(
     cancel: threading.Event | None = None,
     on_line: OnLine | None = None,
     on_start: Callable[[int], None] | None = None,
+    max_capture: int | None = None,
+    orphan_grace_s: float | None = None,
 ) -> ProcResult:
     launch = resolve_launch(argv, env.get("PATH"))
     started = time.monotonic()
@@ -340,7 +346,16 @@ def run_process(
         if on_start is not None:
             on_start(handle.pid)
         ending = pump_until_done(
-            handle, lines, captured, started, total_timeout_s, idle_timeout_s, cancel, on_line
+            handle,
+            lines,
+            captured,
+            started,
+            total_timeout_s,
+            idle_timeout_s,
+            cancel,
+            on_line,
+            max_capture,
+            orphan_grace_s,
         )
     except BaseException:
         kill_tree(handle.pid, running)
@@ -374,7 +389,7 @@ def pid_alive(pid: int) -> bool:
     if IS_WINDOWS:
         import ctypes
 
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        kernel32 = vars(ctypes)["windll"].kernel32
         process = kernel32.OpenProcess(0x1000, False, pid)
         if not process:
             return False

@@ -1,0 +1,27 @@
+name: cline
+kind: agent
+title: Cline CLI
+vendor: Cline
+homepage: https://cline.bot
+verification: {status: verified, version: 3.0.74, date: "2026-11-03", source: "cline --help"}
+install:
+  approx_size_mb: 155
+  npm: ["npm", "install", "-g", "cline"]
+  pnpm: ["pnpm", "add", "-g", "cline"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "cline"], pnpm: ["pnpm", "remove", "-g", "cline"]}
+  drift: {npm: "cline", help: [["--help"]]}
+login: {command: ["cline", "auth"], flow: interactive}
+agent:
+  enabled: false
+  command: cline
+  billing: api
+  parser: text
+  prompt_via: arg
+  base_args: ["--timeout", "{timeout_s}"]
+  read_args: ["--plan"]
+  write_args: []
+  model_args: ["--model", "{model}"]
+  effort_args: ["--thinking", "{effort}"]
+  prompt_args: ["{prompt}"]
+  dangerous_args: ["--yolo"]
+  detect: {version: ["--version"]}

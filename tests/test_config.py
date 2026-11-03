@@ -13,7 +13,12 @@ def problems(text: str) -> list[str]:
 
 def test_defaults_are_valid() -> None:
     config = validate_text("")
-    assert set(config.agents) == {"claude", "deepseek", "codex", "copilot", "agy"}
+    assert {"claude", "deepseek", "codex", "copilot", "agy", "gemini", "aider", "ollama"} <= set(
+        config.agents
+    )
+    assert config.agents["openai"].kind == "provider"
+    assert config.agents["gemini"].enabled is False
+    assert config.agents["claude"].meta["verification"]["status"] == "verified"
     assert sorted(config.tiers) == [1, 2, 3, 4]
     assert {"cheap", "balanced", "max"} <= set(config.profiles)
     assert config.agents["agy"].pty is True
@@ -41,9 +46,31 @@ def test_errors_point_to_line_and_field() -> None:
 
 
 def test_unknown_agent_in_tier_is_reported_with_line() -> None:
-    found = problems("tiers:\n  2:\n    - {agent: gemini}\n  1:\n    - {agent: codex}\n")
+    found = problems("tiers:\n  2:\n    - {agent: codexx}\n  1:\n    - {agent: codex}\n")
     assert len(found) == 1
-    assert found[0].startswith("routes.yaml:3: tiers.2.0.agent: unknown agent 'gemini'")
+    assert found[0].startswith(
+        "routes.yaml:3: tiers.2.0.agent: unknown agent 'codexx'; did you mean 'codex'?"
+    )
+
+
+def test_providers_cannot_edit_code() -> None:
+    found = problems("tiers:\n  1:\n    - {agent: openai, model: x}\n")
+    assert "is an API provider" in found[0]
+    assert (
+        validate_text("classifier:\n  ladder:\n    - {agent: openai, model: x}\n")
+        .classifier.ladder[0]
+        .agent
+        == "openai"
+    )
+
+
+def test_unknown_keys_suggest_the_closest_option() -> None:
+    found = problems("escalaton:\n  max_escalations: 1\nexecution:\n  total_timeout: 5\n")
+    assert "routes.yaml:1: escalaton: unknown field; did you mean 'escalation'?" in found
+    assert (
+        "routes.yaml:4: execution.total_timeout: unknown field; did you mean 'total_timeout_s'?"
+        in found
+    )
 
 
 def test_unknown_placeholder_and_dangerous_flag_are_rejected() -> None:
@@ -91,14 +118,14 @@ def test_type_errors_and_ranges() -> None:
         "bogus: 1\n"
     )
     joined = "\n".join(found)
-    assert "execution.max_escalations: must be between 0 and 10" in joined
-    assert "execution.verify.0: command must be a non-empty list" in joined
-    assert "profiles.odd.start_offset: expected an integer" in joined
-    assert "profiles.odd.skip_tiers.0: must be between 1 and 4" in joined
+    assert "routes.yaml:2: escalation.max_escalations: must be at most 10, got 99" in joined
+    assert "routes.yaml:3: verification.commands.0: needs at least 1 items" in joined
+    assert "profiles.odd.start_offset: expected integer" in joined
+    assert "profiles.odd.skip_tiers.0: must be at most 4, got 9" in joined
     assert "profiles.odd.wat: unknown field" in joined
-    assert "adaptive.enabled: expected true or false" in joined
+    assert "adaptive.enabled: expected boolean" in joined
     assert "rate_limit_patterns.0: invalid regular expression" in joined
-    assert "tiers.7: tier must be 1, 2, 3 or 4" in joined
+    assert "tiers.7: expected one of 1, 2, 3, 4" in joined
     assert "bogus: unknown field" in joined
 
 
@@ -109,12 +136,14 @@ def test_agent_field_validation() -> None:
         "    known_models: oops\n"
     )
     joined = "\n".join(found)
-    assert "agents.new.command: is required" in joined
-    assert "agents.other.env.1BAD: invalid environment variable name" in joined
-    assert "agents.other.env_from.TOKEN: source must be an environment variable name" in joined
-    assert "agents.other.cost_per_attempt_usd: expected a non-negative number" in joined
+    assert "agents.other.env.1BAD: does not match the expected format" in joined
+    assert "agents.other.env_from.TOKEN: does not match the expected format" in joined
+    assert "agents.other.cost_per_attempt_usd: must be at least 0, got -1" in joined
     assert "agents.other.color: unknown field" in joined
-    assert "agents.other.known_models: expected a list of strings" in joined
+    assert "agents.other.known_models: expected array" in joined
+    assert "agents.new.command: is required" in "\n".join(
+        problems("agents:\n  new:\n    billing: api\n")
+    )
 
 
 def test_invalid_yaml_and_non_mapping() -> None:
@@ -127,7 +156,7 @@ def test_empty_tiers_rejected() -> None:
 
 
 def test_version_must_be_one() -> None:
-    assert any("only version 1" in item for item in problems("version: 2\n"))
+    assert any("version: expected one of 1, got 2" in item for item in problems("version: 2\n"))
 
 
 def test_load_config_from_user_dir_and_explicit_path(home: Path, tmp_path: Path) -> None:
@@ -135,7 +164,7 @@ def test_load_config_from_user_dir_and_explicit_path(home: Path, tmp_path: Path)
     path = user_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("execution: {max_escalations: 1}\n", encoding="utf-8")
-    assert load_config().execution.max_escalations == 1
+    assert load_config().escalation.max_escalations == 1
     explicit = tmp_path / "custom.yaml"
     explicit.write_text("execution: {max_escalations: 0}\n", encoding="utf-8")
     assert load_config(explicit).source == explicit
@@ -155,13 +184,13 @@ def test_cross_field_rules() -> None:
         problems(
             "agents:\n  agy:\n    prompt_via: stdin\n    prompt_args: []\n"
             "profiles:\n  odd: {min_tier: 4, max_tier: 2}\n"
-            "execution:\n  verify_env: ['1BAD']\n  colour: x\n"
         )
     )
     assert "agents.agy.pty: a pseudo-terminal agent needs prompt_via: arg" in found
     assert "profiles.odd.min_tier: min_tier 4 is above max_tier 2" in found
-    assert "execution.verify_env.0: invalid environment variable name" in found
-    assert "execution.colour: unknown field" in found
+    schema_found = "\n".join(problems("execution:\n  verify_env: ['1BAD']\n  colour: x\n"))
+    assert "verification.env_allow.0: does not match the expected format" in schema_found
+    assert "execution.colour: unknown field" in schema_found
 
 
 def test_copilot_never_gets_shell_by_default() -> None:

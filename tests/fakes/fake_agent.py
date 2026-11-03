@@ -37,6 +37,9 @@ def log_call(name: str, argv: list[str], prompt: str) -> None:
 
 
 def extract_prompt(argv: list[str]) -> str:
+    for flag in ("--file", "--message-file"):
+        if flag in argv:
+            return Path(argv[argv.index(flag) + 1]).read_text(encoding="utf-8")
     if "--output-format" in argv or "exec" in argv or "-" in argv:
         return sys.stdin.read()
     for flag in ("-p", "--prompt"):

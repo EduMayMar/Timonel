@@ -60,9 +60,13 @@ def check_worktree_pointer(path: Path) -> None:
         raise GitError(f"{path}: worktree .git pointer was tampered with")
 
 
+MANAGED_ROOTS: set[Path] = set()
+
+
 def is_managed_worktree(path: Path) -> bool:
-    root = (data_dir() / "worktrees").resolve()
-    return root in path.resolve().parents
+    roots = {(data_dir() / "worktrees").resolve(), *MANAGED_ROOTS}
+    resolved = path.resolve()
+    return any(root in resolved.parents for root in roots)
 
 
 def git(repo: Path, *args: str, check: bool = True, timeout: float = 120) -> str:
@@ -106,26 +110,33 @@ def is_clean(repo: Path) -> bool:
     return not git(repo, "status", "--porcelain", "--untracked-files=no").strip()
 
 
-def worktrees_root(repo: Path) -> Path:
+def worktrees_root(repo: Path, folder: str = "") -> Path:
     digest = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:10]
-    return data_dir() / "worktrees" / digest
+    return (Path(folder).expanduser() if folder else data_dir() / "worktrees") / digest
 
 
-def branch_name(run_id: str) -> str:
-    return f"timonel/{run_id}"
+def branch_name(run_id: str, pattern: str = "timonel/{id}") -> str:
+    return pattern.replace("{id}", run_id)
 
 
-def create_worktree(repo: Path, run_id: str, base: str | None = None) -> tuple[Path, str, str]:
-    base_ref = base or head(repo)
-    target = worktrees_root(repo) / run_id
+def create_worktree(
+    repo: Path,
+    run_id: str,
+    base: str | None = None,
+    folder: str = "",
+    pattern: str = "timonel/{id}",
+) -> tuple[Path, str, str]:
+    base_ref = git(repo, "rev-parse", "--verify", f"{base or 'HEAD'}^{{commit}}").strip()
+    target = worktrees_root(repo, folder) / run_id
     target.parent.mkdir(parents=True, exist_ok=True)
-    branch = branch_name(run_id)
+    MANAGED_ROOTS.add(target.parent.parent.resolve())
+    branch = branch_name(run_id, pattern)
     git(repo, "worktree", "add", "-b", branch, str(target), base_ref)
     return target, branch, base_ref
 
 
-def attach_worktree(repo: Path, run_id: str, branch: str) -> Path:
-    target = worktrees_root(repo) / run_id
+def attach_worktree(repo: Path, run_id: str, branch: str, folder: str = "") -> Path:
+    target = worktrees_root(repo, folder) / run_id
     if target.is_dir() and (target / ".git").is_file():
         return target
     git(repo, "worktree", "prune")
