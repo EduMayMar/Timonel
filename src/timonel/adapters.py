@@ -167,7 +167,7 @@ def parse_json(raw: str) -> AgentOutput:
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
-        return AgentOutput(text=raw, cost_usd=None, is_error=True, parsed=False)
+        return AgentOutput(text=raw, cost_usd=None, is_error=False, parsed=False)
     return parse_json_result(payload, raw)
 
 
@@ -189,7 +189,7 @@ def json_lines(raw: str) -> list[dict[str, Any]]:
 def parse_stream_json(raw: str) -> AgentOutput:
     results = [event for event in json_lines(raw) if event.get("type") == "result"]
     if not results:
-        return AgentOutput(text=raw, cost_usd=None, is_error=True, parsed=False)
+        return AgentOutput(text=raw, cost_usd=None, is_error=False, parsed=False)
     return parse_json_result(results[-1], raw)
 
 
@@ -208,7 +208,7 @@ def event_text(event: Mapping[str, Any]) -> str | None:
 def parse_jsonl(raw: str) -> AgentOutput:
     events = json_lines(raw)
     if not events:
-        return AgentOutput(text=raw, cost_usd=None, is_error=True, parsed=False)
+        return AgentOutput(text=raw, cost_usd=None, is_error=False, parsed=False)
     messages = [text for event in events if (text := event_text(event)) is not None]
     failed = any(event.get("type") in ("turn.failed", "error") for event in events)
     tokens_in = tokens_out = None
@@ -238,11 +238,15 @@ def parse_output(agent: Agent, raw: str) -> AgentOutput:
     if agent.parser == "jsonl":
         return parse_jsonl(clean)
     text = clean.strip()
-    return AgentOutput(text=text, cost_usd=None, is_error=not text, parsed=bool(text))
+    return AgentOutput(text=text, cost_usd=None, is_error=False, parsed=bool(text))
+
+
+RATE_LIMIT_WINDOW = 2000
 
 
 def is_rate_limited(agent: Agent, global_patterns: tuple[str, ...], text: str) -> bool:
+    tail = text[-RATE_LIMIT_WINDOW:]
     return any(
-        re.search(pattern, text, re.IGNORECASE)
+        re.search(pattern, tail, re.IGNORECASE)
         for pattern in (*agent.rate_limit_patterns, *global_patterns)
     )

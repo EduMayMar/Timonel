@@ -78,7 +78,7 @@ agents:
     prompt_via: arg
     base_args: ["--silent", "--no-color", "--no-ask-user", "--no-auto-update", "--allow-all-tools"]
     read_args: ["--deny-tool=write", "--deny-tool=shell"]
-    write_args: ["--deny-tool=shell(git push)"]
+    write_args: ["--deny-tool=shell"]
     model_args: ["--model", "{model}"]
     effort_args: ["--reasoning-effort", "{effort}"]
     prompt_args: ["-p", "{prompt}"]
@@ -161,6 +161,7 @@ execution:
   idle_timeout_s: 300
   verify: []
   verify_timeout_s: 900
+  verify_env: []
 
 adaptive:
   enabled: true

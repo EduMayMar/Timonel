@@ -51,9 +51,11 @@ def extract_prompt(argv: list[str]) -> str:
 
 def writing(argv: list[str]) -> bool:
     joined = " ".join(argv)
+    if "--deny-tool=write" in argv:
+        return False
     return any(
         marker in joined
-        for marker in ("acceptEdits", "workspace-write", "accept-edits", "shell(git push)")
+        for marker in ("acceptEdits", "workspace-write", "accept-edits", "--deny-tool=shell")
     )
 
 
@@ -168,6 +170,24 @@ def main() -> int:
     if mode == "crash":
         print("Traceback: boom", file=sys.stderr)
         return 2
+    if mode == "orphan":
+        import subprocess
+
+        subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        apply_edits(name, prompt) if writing(argv) else None
+        emit(argv, answer_for(name, prompt))
+        sys.stdout.flush()
+        return 0
+    if mode == "limit_json":
+        emit(argv, "Claude AI usage limit reached", error=True)
+        return 1
+    if mode == "noisy_failure":
+        print("handled HTTP 429 in retry.py and the rate limit tests\n" + "x" * 3000)
+        print("AssertionError: expected 3 retries")
+        return 1
+    if mode == "print_env":
+        print(json.dumps(dict(os.environ)))
+        return 0
     if mode == "need_tty" and not sys.stdout.isatty():
         time.sleep(3600)
         return 0

@@ -19,6 +19,7 @@ IS_WINDOWS = os.name == "nt"
 CMD_UNSAFE = re.compile(r'[\r\n"%!^&|<>()]')
 NPM_SHIM_TARGET = re.compile(r'"%(?:~?dp0%?)\\?([^"%]+\.(?:js|cjs|mjs))"', re.IGNORECASE)
 MAX_CAPTURE = 4_000_000
+ORPHAN_GRACE_S = 2.0
 
 OnLine = Callable[[str], None]
 
@@ -44,8 +45,21 @@ class Handle(Protocol):
     def poll(self) -> int | None: ...
 
 
-def which(command: str, path: str | None = None) -> str | None:
-    return shutil.which(command, path=path)
+def folder_key(path: str | Path) -> str:
+    return os.path.normcase(str(Path(path).absolute()))
+
+
+def path_entries(path: str | None) -> set[str]:
+    raw = path if path is not None else os.environ.get("PATH", "")
+    return {folder_key(entry) for entry in raw.split(os.pathsep) if entry}
+
+
+def which(command: str, path: str | None = None, windows: bool = IS_WINDOWS) -> str | None:
+    found = shutil.which(command, path=path)
+    explicit = Path(command).is_absolute() or os.sep in command or "/" in command
+    if found is None or not windows or explicit:
+        return found
+    return found if folder_key(Path(found).absolute().parent) in path_entries(path) else None
 
 
 def npm_shim_script(shim: Path) -> Path | None:
@@ -83,7 +97,7 @@ def resolve_launch(
     return [str(executable), *rest]
 
 
-def kill_tree(pid: int) -> None:
+def kill_tree(pid: int, running: Callable[[], bool] | None = None) -> None:
     if IS_WINDOWS:
         subprocess.run(
             ["taskkill", "/T", "/F", "/PID", str(pid)],
@@ -97,12 +111,8 @@ def kill_tree(pid: int) -> None:
     except (ProcessLookupError, PermissionError):
         return
     deadline = time.monotonic() + 3
-    while time.monotonic() < deadline:
-        try:
-            os.killpg(pid, 0)
-        except (ProcessLookupError, PermissionError):
-            return
-        time.sleep(0.05)
+    while running is not None and running() and time.monotonic() < deadline:
+        time.sleep(0.02)
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(pid, signal.SIGKILL)
 
@@ -199,7 +209,7 @@ class WinPtyHandle:
         if self.process.isalive():
             return None
         status = self.process.exitstatus
-        return int(status) if status is not None else 0
+        return int(status) if status is not None else None
 
 
 def spawn_windows_pty(
@@ -259,6 +269,14 @@ def wait_exit(handle: Handle, grace_s: float) -> int | None:
     return code
 
 
+def remember(captured: list[str], line: str, size: int) -> int:
+    captured.append(line)
+    size += len(line)
+    while size > MAX_CAPTURE and len(captured) > 1:
+        size -= len(captured.pop(0))
+    return size
+
+
 def pump_until_done(
     handle: Handle,
     lines: queue.Queue[str | None],
@@ -271,6 +289,7 @@ def pump_until_done(
 ) -> str:
     size = 0
     last_activity = started
+    exited_at: float | None = None
     while True:
         try:
             line = lines.get(timeout=0.1)
@@ -281,11 +300,13 @@ def pump_until_done(
             return "finished"
         if line:
             last_activity = now
-            if size < MAX_CAPTURE:
-                captured.append(line)
-                size += len(line)
+            size = remember(captured, line, size)
             if on_line is not None:
                 on_line(line)
+        elif exited_at is None and handle.poll() is not None:
+            exited_at = now
+        elif exited_at is not None and now - max(exited_at, last_activity) > ORPHAN_GRACE_S:
+            return "finished"
         if cancel is not None and cancel.is_set():
             return "cancelled"
         if now - started > total_timeout_s:
@@ -311,6 +332,10 @@ def run_process(
     started = time.monotonic()
     handle, lines = spawn(launch, cwd, env, stdin, use_pty)
     captured: list[str] = []
+
+    def running() -> bool:
+        return handle.poll() is None
+
     try:
         if on_start is not None:
             on_start(handle.pid)
@@ -318,18 +343,20 @@ def run_process(
             handle, lines, captured, started, total_timeout_s, idle_timeout_s, cancel, on_line
         )
     except BaseException:
-        kill_tree(handle.pid)
+        kill_tree(handle.pid, running)
         raise
     if ending != "finished":
-        kill_tree(handle.pid)
+        kill_tree(handle.pid, running)
     exit_code = wait_exit(handle, 5 if ending == "finished" else 3)
     if exit_code is None:
-        kill_tree(handle.pid)
+        kill_tree(handle.pid, running)
         exit_code = wait_exit(handle, 2)
     while ending == "finished" and not lines.empty():
         rest = lines.get_nowait()
         if rest:
             captured.append(rest)
+    if ending == "finished" and not IS_WINDOWS:
+        kill_tree(handle.pid, running)
     return ProcResult(
         exit_code=exit_code,
         output="".join(captured),

@@ -65,12 +65,22 @@ class McpServer:
     ) -> None:
         self.engine = Engine(config, ledger or Ledger())
         self.cwd = cwd or Path.cwd()
+        try:
+            self.root: Path | None = gitops.repo_root(self.cwd)
+        except gitops.GitError:
+            self.root = None
         self.threads: list[threading.Thread] = []
 
     def repo(self, arguments: dict[str, Any]) -> Path:
         value = arguments.get("repo")
         path = Path(value) if isinstance(value, str) and value else self.cwd
-        return gitops.repo_root(path if path.is_absolute() else self.cwd / path)
+        root = gitops.repo_root(path if path.is_absolute() else self.cwd / path)
+        if self.root is None or root != self.root:
+            raise ValueError(
+                "this MCP server only works on the repository it was started in"
+                f" ({self.root or 'none: start timonel mcp inside a git repository'})"
+            )
+        return root
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         task = arguments.get("task")
@@ -80,7 +90,9 @@ class McpServer:
             raise ValueError("task must be a non-empty string")
         profile = str(arguments.get("profile") or "balanced")
         if name == "timonel_plan":
-            return self.engine.plan(str(task), profile=profile, cwd=self.repo(arguments)).to_dict()
+            return self.engine.preview(
+                str(task), profile=profile, cwd=self.repo(arguments)
+            ).to_dict()
         if name == "timonel_run":
             force = arguments.get("force")
             options = RunOptions(
@@ -158,14 +170,22 @@ class McpServer:
             try:
                 result = self.call_tool(name, arguments)
             except (ValueError, RunError, RoutingError, GitError) as error:
+                message_text = self.engine.redact(str(error))
                 return reply(
-                    ident, {"content": [{"type": "text", "text": str(error)}], "isError": True}
+                    ident, {"content": [{"type": "text", "text": message_text}], "isError": True}
                 )
             text = json.dumps(result, ensure_ascii=False, default=str, indent=2)
             return reply(
                 ident, {"content": [{"type": "text", "text": text}], "structuredContent": result}
             )
         return failure(ident, -32601, f"method not found: {method}")
+
+    def safe_handle(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            return self.handle(message)
+        except Exception as error:
+            text = self.engine.redact(f"{type(error).__name__}: {error}")
+            return failure(message.get("id"), -32603, f"internal error: {text}")
 
     def serve(self, reader: IO[str], writer: IO[str]) -> None:
         for line in reader:
@@ -177,7 +197,7 @@ class McpServer:
                 response: dict[str, Any] | None = failure(None, -32700, "parse error")
             else:
                 response = (
-                    self.handle(message)
+                    self.safe_handle(message)
                     if isinstance(message, dict)
                     else failure(None, -32600, "invalid request")
                 )

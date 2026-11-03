@@ -17,7 +17,7 @@ from rich.table import Table
 from timonel import __version__, gitops
 from timonel.config import Config, ConfigError, load_config, user_config_path, validate_text
 from timonel.doctor import AgentHealth, diagnose
-from timonel.engine import Engine, RunError, RunOptions, new_run_id
+from timonel.engine import Engine, RunError, RunOptions
 from timonel.gitops import GitError
 from timonel.ledger import Ledger
 from timonel.router import Plan, RoutingError, parse_force
@@ -177,14 +177,11 @@ def make_engine(config: Config, live: bool = False) -> Engine:
 def cmd_plan(args: argparse.Namespace, config: Config) -> int:
     engine = make_engine(config)
     root = gitops.repo_root(Path(args.repo))
-    run_id = f"plan-{new_run_id()}" if args.model_classify else None
-    plan = engine.plan(
-        args.task,
-        profile=args.profile,
-        force=parse_force(args.force) if args.force else None,
-        run_id=run_id,
-        cwd=root,
-    )
+    force = parse_force(args.force) if args.force else None
+    if args.model_classify:
+        plan = engine.preview(args.task, profile=args.profile, force=force, cwd=root)
+    else:
+        plan = engine.plan(args.task, profile=args.profile, force=force, cwd=root)
     if args.json:
         emit_json(plan.to_dict())
     else:
@@ -533,6 +530,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    os.environ.setdefault("NoDefaultCurrentDirectoryInExePath", "1")
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:

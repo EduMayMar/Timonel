@@ -21,7 +21,7 @@ from timonel import __version__, gitops
 from timonel.classify import KINDS, Classification, schema_errors
 from timonel.config import TIERS, Config, ConfigError, user_config_path, validate_text
 from timonel.doctor import AgentHealth, diagnose
-from timonel.engine import Engine, RunError, RunOptions, new_run_id
+from timonel.engine import Engine, RunError, RunOptions
 from timonel.gitops import GitError
 from timonel.ledger import Ledger
 from timonel.router import Plan, RoutingError, Step, parse_force
@@ -113,6 +113,8 @@ class App:
         self.repo = repo
         self.engine = Engine(config, ledger, environ=environ)
         self.token = secrets.token_urlsafe(32)
+        self.session = secrets.token_urlsafe(32)
+        self.token_used = False
         self.csrf = secrets.token_urlsafe(32)
         self.port = port
         self.health: tuple[float, list[AgentHealth]] | None = None
@@ -158,11 +160,10 @@ class App:
         if not isinstance(task, str) or not task.strip():
             raise ApiError(HTTPStatus.BAD_REQUEST, "task is required")
         force = body.get("force")
-        plan = self.engine.plan(
+        plan = self.engine.preview(
             task,
             profile=str(body.get("profile") or "balanced"),
             force=parse_force(force) if isinstance(force, str) and force else None,
-            run_id=f"plan-{new_run_id()}",
             cwd=self.repo,
         )
         return plan.to_dict()
@@ -263,17 +264,21 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         return
 
+    @property
+    def cookie_name(self) -> str:
+        return f"{COOKIE}_{self.app.port}"
+
     def cookie_token(self) -> str:
         cookie = SimpleCookie()
         try:
             cookie.load(self.headers.get("Cookie", ""))
         except Exception:
             return ""
-        morsel = cookie.get(COOKIE)
+        morsel = cookie.get(self.cookie_name)
         return morsel.value if morsel else ""
 
     def authenticated(self) -> bool:
-        return hmac.compare_digest(self.cookie_token().encode(), self.app.token.encode())
+        return hmac.compare_digest(self.cookie_token().encode(), self.app.session.encode())
 
     def host_ok(self) -> bool:
         return self.headers.get("Host", "") in self.app.hosts
@@ -339,6 +344,8 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError as error:
             raise ApiError(HTTPStatus.BAD_REQUEST, "invalid Content-Length") from error
+        if length < 0:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "invalid Content-Length")
         if length > MAX_BODY:
             raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "request body too large")
         raw = self.rfile.read(length) if length else b"{}"
@@ -390,15 +397,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         offered = query.get("token", [""])[0]
         if offered:
-            if not hmac.compare_digest(offered.encode(), self.app.token.encode()):
+            valid = hmac.compare_digest(offered.encode(), self.app.token.encode())
+            if not valid or self.app.token_used:
                 self.send_text(
-                    HTTPStatus.UNAUTHORIZED, "Invalid token. Open the URL printed by 'timonel ui'."
+                    HTTPStatus.UNAUTHORIZED,
+                    "Invalid or already used token. Restart 'timonel ui' for a new URL.",
                 )
                 return
+            self.app.token_used = True
             self.send_response(HTTPStatus.SEE_OTHER)
             self.send_header("Location", "/")
             self.send_header(
-                "Set-Cookie", f"{COOKIE}={self.app.token}; HttpOnly; SameSite=Strict; Path=/"
+                "Set-Cookie",
+                f"{self.cookie_name}={self.app.session}; HttpOnly; SameSite=Strict; Path=/",
             )
             self.security_headers()
             self.end_headers()
@@ -549,6 +560,8 @@ def serve(
     except KeyboardInterrupt:
         for run_id in list(app.engine.cancels):
             app.engine.cancel(run_id)
+        for thread in app.threads.values():
+            thread.join(10)
     finally:
         server.server_close()
     return 0

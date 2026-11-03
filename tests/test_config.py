@@ -148,3 +148,23 @@ def test_user_dir_platform_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", "/cfg")
     if __import__("os").name != "nt":
         assert user_config_path() == Path("/cfg/timonel/routes.yaml")
+
+
+def test_cross_field_rules() -> None:
+    found = "\n".join(
+        problems(
+            "agents:\n  agy:\n    prompt_via: stdin\n    prompt_args: []\n"
+            "profiles:\n  odd: {min_tier: 4, max_tier: 2}\n"
+            "execution:\n  verify_env: ['1BAD']\n  colour: x\n"
+        )
+    )
+    assert "agents.agy.pty: a pseudo-terminal agent needs prompt_via: arg" in found
+    assert "profiles.odd.min_tier: min_tier 4 is above max_tier 2" in found
+    assert "execution.verify_env.0: invalid environment variable name" in found
+    assert "execution.colour: unknown field" in found
+
+
+def test_copilot_never_gets_shell_by_default() -> None:
+    copilot = validate_text("").agents["copilot"]
+    assert "--deny-tool=shell" in copilot.write_args
+    assert "--deny-tool=shell" in copilot.read_args

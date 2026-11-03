@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import secrets
 import shutil
+import subprocess
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -20,7 +21,13 @@ from timonel.adapters import (
     parse_output,
     secret_sources,
 )
-from timonel.classify import Classification, classify, extract_json_object, heuristic
+from timonel.classify import (
+    READ_ONLY_KINDS,
+    Classification,
+    classify,
+    extract_json_object,
+    heuristic,
+)
 from timonel.config import Agent, Config, Rung
 from timonel.doctor import check_auth, safe_env
 from timonel.gitops import GitError
@@ -36,6 +43,51 @@ REVIEW_MARKER = "TIMONEL_REVIEW"
 PLAN_MARKER = "TIMONEL_PLAN"
 FINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled", "applied", "discarded"})
 AVAILABILITY_TTL_S = 300
+VERIFY_ENV = frozenset(
+    {
+        "PATH",
+        "PATHEXT",
+        "HOME",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "WINDIR",
+        "COMSPEC",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "LANG",
+        "LANGUAGE",
+        "TERM",
+        "SHELL",
+        "USER",
+        "USERNAME",
+        "LOGNAME",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMDATA",
+        "PROGRAMFILES",
+        "PROGRAMFILES(X86)",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+        "VIRTUAL_ENV",
+        "CONDA_PREFIX",
+        "PYTHONPATH",
+        "PYTHONUTF8",
+        "NODE_PATH",
+        "GOPATH",
+        "GOROOT",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+        "JAVA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "CI",
+    }
+)
 
 
 class RunError(Exception):
@@ -75,6 +127,15 @@ class LadderOutcome:
     error: str = ""
     verify_passed: bool = False
     contexts: list[str] = field(default_factory=list)
+
+
+MAX_ARGV = 30000 if os.name == "nt" else 120000
+
+
+def argv_length(argv: Sequence[str]) -> int:
+    if os.name == "nt":
+        return len(subprocess.list2cmdline(list(argv)))
+    return max((len(arg.encode("utf-8")) for arg in argv), default=0)
 
 
 def trim(text: str, limit: int = CONTEXT_LIMIT) -> str:
@@ -164,6 +225,21 @@ def parse_subtasks(text: str, max_subtasks: int) -> list[dict[str, Any]] | None:
     return list(seen.values()) if waves(list(seen.values())) is not None else None
 
 
+def next_ladder_start(plan: Plan, position: int) -> int:
+    start = 0
+    for ladder in plan.ladders:
+        if position < start + len(ladder):
+            return start + len(ladder)
+        start += len(ladder)
+    return start
+
+
+def subtask_classification(task: str) -> Classification:
+    guess = heuristic(task)
+    kind = "edit" if guess.kind in READ_ONLY_KINDS else guess.kind
+    return replace(guess, kind=kind, needs_write=True, reason=f"subtask; {guess.reason}")
+
+
 def waves(subtasks: list[dict[str, Any]]) -> list[list[dict[str, Any]]] | None:
     remaining = {item["id"]: item for item in subtasks}
     done: set[str] = set()
@@ -199,11 +275,17 @@ class Engine:
         self.availability: tuple[float, set[str]] | None = None
         self.lock = threading.Lock()
 
+    def scrub(self, value: Any) -> Any:
+        if isinstance(value, str):
+            return self.redact(value)
+        if isinstance(value, dict):
+            return {key: self.scrub(item) for key, item in value.items()}
+        if isinstance(value, list | tuple):
+            return [self.scrub(item) for item in value]
+        return value
+
     def emit(self, run_id: str, kind: str, data: dict[str, Any]) -> None:
-        clean = {
-            key: self.redact(value) if isinstance(value, str) else value
-            for key, value in data.items()
-        }
+        clean: dict[str, Any] = self.scrub(data)
         self.ledger.add_event(run_id, kind, clean)
         if self.on_event is not None:
             self.on_event(run_id, kind, clean)
@@ -241,15 +323,7 @@ class Engine:
     def estimate_cost(self, agent: Agent, model: str) -> float | None:
         if agent.cost_per_attempt_usd is not None:
             return agent.cost_per_attempt_usd
-        known = [
-            row["cost_usd"]
-            for row in self.ledger.all_attempts()
-            if row["agent"] == agent.name
-            and row["model"] == model
-            and row["cost_usd"] is not None
-            and not row["cost_estimated"]
-        ]
-        return sum(known) / len(known) if known else None
+        return self.ledger.mean_reported_cost(agent.name, model)
 
     def invoke(
         self,
@@ -350,6 +424,15 @@ class Engine:
             )
         except SecretMissingError as error:
             return AttemptResult("launch_error", None, str(error))
+        for target in agent.env_from:
+            self.redact.add(invocation.env.get(target, ""))
+        if invocation.stdin is None and argv_length(invocation.argv) > MAX_ARGV:
+            return AttemptResult(
+                "launch_error",
+                None,
+                f"prompt too long to pass as an argument ({argv_length(invocation.argv)} characters); "
+                "use prompt_via: stdin for this agent",
+            )
         buffer: list[str] = []
         last_flush = [time.monotonic()]
 
@@ -459,16 +542,22 @@ class Engine:
             now=self.clock(),
         )
 
+    def preview(
+        self, task: str, *, profile: str = "balanced", force: Rung | None = None, cwd: Path
+    ) -> Plan:
+        run_id = f"plan-{new_run_id()}"
+        try:
+            return self.plan(task, profile=profile, force=force, run_id=run_id, cwd=cwd)
+        finally:
+            with self.lock:
+                self.cancels.pop(run_id, None)
+
     def verify(
         self, run_id: str, worktree: Path, commands: Sequence[Sequence[str]]
     ) -> tuple[bool, str]:
         if not commands:
             return True, "no verification configured"
-        env = {
-            key: value
-            for key, value in self.environ.items()
-            if key not in secret_sources(self.config.agents)
-        }
+        env = self.verify_env()
         for command in commands:
             self.emit(run_id, "verify.started", {"command": " ".join(command)})
             try:
@@ -485,6 +574,8 @@ class Engine:
                     run_id, "verify.finished", {"command": " ".join(command), "passed": False}
                 )
                 return False, f"$ {' '.join(command)}\n{error}"
+            if proc.cancelled:
+                return False, "cancelled"
             passed = proc.exit_code == 0 and not (
                 proc.timed_out or proc.idle_timed_out or proc.cancelled
             )
@@ -501,6 +592,15 @@ class Engine:
                 return False, f"$ {' '.join(command)} (exit {proc.exit_code})\n{trim(proc.output)}"
         return True, "verification passed"
 
+    def verify_env(self) -> dict[str, str]:
+        allowed = {*VERIFY_ENV, *self.config.execution.verify_env}
+        blocked = secret_sources(self.config.agents)
+        return {
+            key: value
+            for key, value in self.environ.items()
+            if (key.upper() in allowed or key.upper().startswith("LC_")) and key not in blocked
+        }
+
     def review(
         self, run_id: str, task: str, diff: str, executor: Step, cwd: Path, kind: str
     ) -> tuple[bool, list[str]] | None:
@@ -514,6 +614,7 @@ class Engine:
             return None
         answer = self.ask(run_id, others[:3], review_prompt(task, diff), cwd, "review", kind)
         if answer is None:
+            self.emit(run_id, "review", {"approve": None, "issues": ["no reviewer answered"]})
             return None
         verdict = parse_review(answer)
         self.emit(
@@ -571,6 +672,8 @@ class Engine:
                     continue
                 if self.cancel_event(run_id).is_set():
                     return LadderOutcome(False, step, "", "cancelled")
+                if step.agent in self.ledger.cooldowns(self.clock()):
+                    continue
                 self.ledger.update_run(run_id, summary=f"running {step.label} (tier {step.tier})")
                 prompt = task_prompt(task, plan.write, notes[-2:])
                 result = self.invoke(
@@ -634,6 +737,8 @@ class Engine:
     ) -> tuple[bool, str]:
         diff = gitops.diff_summary(cwd, base, "HEAD").text
         verdict = self.review(run_id, task, diff, step, cwd, plan.classification.kind)
+        if self.cancel_event(run_id).is_set():
+            return False, "cancelled"
         if verdict is None or verdict[0]:
             return True, "approved" if verdict else "review unavailable"
         issues = "\n".join(f"- {issue}" for issue in verdict[1]) or "- unspecified"
@@ -661,9 +766,7 @@ class Engine:
         return self.verify(run_id, cwd, verify_commands)
 
     def mark_last_attempt(self, run_id: str, outcome: str, error: str) -> None:
-        executes = [
-            row for row in self.ledger.attempts(run_id) if row["role"] in ("execute", "fix")
-        ]
+        executes = [row for row in self.ledger.attempts(run_id) if row["role"] == "execute"]
         if executes:
             self.ledger.finish_attempt(
                 executes[-1]["id"],
@@ -701,8 +804,9 @@ class Engine:
             self.emit(identifier, "run.finished", {"status": "interrupted"})
             raise
         except (GitError, RoutingError, RunError) as error:
-            self.ledger.update_run(identifier, status="failed", error=self.redact(str(error)))
-            self.emit(identifier, "run.finished", {"status": "failed", "error": str(error)})
+            self.fail_run(identifier, str(error))
+        except Exception as error:
+            self.fail_run(identifier, f"internal error: {type(error).__name__}: {error}")
         finally:
             with self.lock:
                 self.cancels.pop(identifier, None)
@@ -710,6 +814,10 @@ class Engine:
         if record is None:
             raise RunError(f"run {identifier} vanished")
         return record
+
+    def fail_run(self, run_id: str, message: str) -> None:
+        self.ledger.update_run(run_id, status="failed", error=self.redact(message))
+        self.emit(run_id, "run.finished", {"status": "failed", "error": message})
 
     def drive(self, run_id: str, options: RunOptions, root: Path) -> None:
         plan = options.plan or self.plan(
@@ -720,17 +828,17 @@ class Engine:
             run_id=run_id,
             cwd=root,
         )
+        verify_commands = (
+            options.verify if options.verify is not None else self.config.execution.verify
+        )
         self.ledger.update_run(
             run_id,
             classification=plan.classification.to_dict(),
-            plan=plan.to_dict(),
+            plan={**plan.to_dict(), "verify": [list(command) for command in verify_commands]},
             status="running",
             write=plan.write,
         )
         self.emit(run_id, "plan", {"plan": plan.to_dict()})
-        verify_commands = (
-            options.verify if options.verify is not None else self.config.execution.verify
-        )
         wants_decompose = (
             options.decompose
             if options.decompose is not None
@@ -760,8 +868,13 @@ class Engine:
         cwd, base = root, ""
         if plan.write:
             record = self.ledger.get_run(run_id) or {}
-            if record.get("worktree") and Path(record["worktree"]).is_dir():
-                cwd, base = Path(record["worktree"]), record["base_ref"]
+            if record.get("branch") and record.get("base_ref"):
+                cwd, base = (
+                    gitops.attach_worktree(root, run_id, record["branch"]),
+                    record["base_ref"],
+                )
+                self.ledger.update_run(run_id, worktree=cwd)
+                self.reset_worktree(cwd, base)
             else:
                 cwd, branch, base = gitops.create_worktree(root, run_id, options.base_ref)
                 self.ledger.update_run(run_id, worktree=cwd, branch=branch, base_ref=base)
@@ -825,6 +938,22 @@ class Engine:
             run_id=None,
         )
 
+    def run_children(
+        self, run_id: str, children: Sequence[tuple[str, RunOptions]], workers: int
+    ) -> None:
+        pool = ThreadPoolExecutor(max_workers=workers)
+        try:
+            futures = [pool.submit(self.run, child, child_id) for child_id, child in children]
+            for future in futures:
+                future.result()
+        except BaseException:
+            self.cancel(run_id)
+            for child_id, _ in children:
+                self.cancel(child_id)
+            raise
+        finally:
+            pool.shutdown(wait=True)
+
     def run_race(
         self,
         run_id: str,
@@ -867,10 +996,15 @@ class Engine:
                 "runs": [cid for cid, _ in children],
             },
         )
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            list(pool.map(lambda item: self.run(item[1], item[0]), children))
+        self.run_children(run_id, [(cid, child) for cid, child in children], 2)
         finished = [self.ledger.get_run(cid) or {} for cid, _ in children]
         winners = [run for run in finished if run.get("status") == "succeeded"]
+        if self.cancel_event(run_id).is_set():
+            for run in finished:
+                if run.get("id") and run.get("status") not in ("applied", "discarded"):
+                    self.discard_run(run["id"])
+            self.conclude(run_id, plan, LadderOutcome(False, None, "", "cancelled"), root, base)
+            return
         if not winners:
             self.ledger.update_run(run_id, status="failed", error="no race contender succeeded")
             self.emit(
@@ -945,10 +1079,16 @@ class Engine:
             head = gitops.head(worktree)
             launched = []
             for item in ready:
-                child = self.child_options(options, run_id, item["task"], head)
+                child = replace(
+                    self.child_options(options, run_id, item["task"], head),
+                    classification=subtask_classification(item["task"]),
+                )
                 launched.append((item, self.start(child), child))
-            with ThreadPoolExecutor(max_workers=self.config.decompose.max_parallel) as pool:
-                list(pool.map(lambda entry: self.run(entry[2], entry[1]), launched))
+            self.run_children(
+                run_id,
+                [(child_id, child) for _, child_id, child in launched],
+                self.config.decompose.max_parallel,
+            )
             for item, child_id, _ in launched:
                 record = self.ledger.get_run(child_id) or {}
                 merged = record.get("status") == "succeeded" and gitops.merge_into_worktree(
@@ -995,9 +1135,12 @@ class Engine:
         )
         if status in FINAL_STATUSES - {"cancelled"} or alive:
             raise RunError(f"run {run_id} is {status}; only interrupted runs can be resumed")
+        if self.ledger.child_runs(run_id):
+            raise RunError(f"run {run_id} raced or split into subtasks; start it again instead")
         if not record.get("plan"):
             raise RunError(f"run {run_id} has no plan to resume")
         plan = Plan.from_dict(record["plan"])
+        verify = tuple(tuple(command) for command in record["plan"].get("verify", []))
         index = self.resume_index(run_id, plan)
         self.ledger.update_run(run_id, status="running", owner_pid=os.getpid(), error=None)
         self.emit(run_id, "run.resumed", {"from_step": index})
@@ -1008,15 +1151,15 @@ class Engine:
             plan=plan,
             allow_dangerous=allow_dangerous,
         )
-        root = gitops.repo_root(Path(record["repo"]))
         self.cancel_event(run_id)
         try:
-            self.run_single(
-                run_id, options, plan, root, self.config.execution.verify, start_index=index
-            )
+            root = gitops.repo_root(Path(record["repo"]))
+            self.run_single(run_id, options, plan, root, verify, start_index=index)
         except KeyboardInterrupt:
             self.ledger.update_run(run_id, status="interrupted")
             raise
+        except Exception as error:
+            self.fail_run(run_id, f"{type(error).__name__}: {error}")
         finally:
             with self.lock:
                 self.cancels.pop(run_id, None)
@@ -1024,7 +1167,8 @@ class Engine:
 
     def resume_index(self, run_id: str, plan: Plan) -> int:
         steps = plan.steps()
-        executes = [row for row in self.ledger.attempts(run_id) if row["role"] == "execute"]
+        rows = [row for row in self.ledger.attempts(run_id) if row["role"] in ("execute", "fix")]
+        executes = [row for row in rows if row["role"] == "execute"]
         if not executes:
             return 0
         last = executes[-1]
@@ -1039,11 +1183,13 @@ class Engine:
         )
         if position < 0:
             return 0
-        if last["outcome"] in ("running", "cancelled"):
+        final = rows[-1]
+        if final["outcome"] in ("running", "cancelled"):
             return position
-        if last["outcome"] == "verify_failed":
-            tier = last["tier"]
-            return next((index for index, step in enumerate(steps) if step.tier > tier), len(steps))
+        if last["outcome"] == "verify_failed" or (
+            final["role"] == "fix" and final["outcome"] != "succeeded"
+        ):
+            return next_ladder_start(plan, position)
         return position + 1
 
     def apply(self, run_id: str) -> dict[str, Any]:

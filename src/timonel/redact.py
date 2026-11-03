@@ -36,6 +36,10 @@ class Redactor:
     def __init__(self, environ: Mapping[str, str] | None = None, extra: Iterable[str] = ()) -> None:
         self.values = secret_values(environ, extra)
 
+    def add(self, value: str) -> None:
+        if len(value) >= 8 and value not in self.values:
+            self.values = sorted([*self.values, value], key=len, reverse=True)
+
     def __call__(self, text: str) -> str:
         for value in self.values:
             text = text.replace(value, MASK)

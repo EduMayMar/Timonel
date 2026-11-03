@@ -271,6 +271,15 @@ class Ledger:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def mean_reported_cost(self, agent: str, model: str) -> float | None:
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT AVG(cost_usd) FROM attempts WHERE agent = ? AND model = ?"
+                " AND cost_usd IS NOT NULL AND cost_estimated = 0",
+                (agent, model),
+            ).fetchone()
+        return float(row[0]) if row and row[0] is not None else None
+
     def route_stats(self, kind: str | None = None) -> list[RouteStats]:
         query = (
             "SELECT kind, tier, agent, model, COUNT(*) AS total,"

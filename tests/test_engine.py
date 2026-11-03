@@ -82,7 +82,7 @@ def test_write_task_escalates_after_failed_verification(fakes: Fakes, repo: Path
         ("copilot", "verify_failed"),
         ("codex", "failed"),
         ("claude", "succeeded"),
-    ] or executes(engine, record["id"])[0] == ("copilot", "verify_failed")
+    ]
     assert record["branch"] == f"timonel/{record['id']}"
     assert (Path(record["worktree"]) / "result.txt").read_text() == "good"
     assert not (repo / "result.txt").exists()
@@ -118,8 +118,19 @@ def test_rate_limit_puts_agent_in_cooldown_and_skips(fakes: Fakes, repo: Path) -
     assert executes(engine, second["id"])[0][0] == "claude"
 
 
-@pytest.mark.parametrize("mode", ["garbage", "partial", "invalid_json", "crash", "error"])
-def test_bad_outputs_fall_through_to_next_agent(fakes: Fakes, repo: Path, mode: str) -> None:
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("garbage", "garbage"),
+        ("invalid_json", "garbage"),
+        ("partial", "failed"),
+        ("crash", "failed"),
+        ("error", "failed"),
+    ],
+)
+def test_bad_outputs_fall_through_to_next_agent(
+    fakes: Fakes, repo: Path, mode: str, expected: str
+) -> None:
     engine = with_env(
         fakes, FAKE_CLASSIFICATION=SIMPLE, FAKE_MODE_COPILOT="success", FAKE_MODE_CLAUDE=mode
     )
@@ -131,7 +142,7 @@ def test_bad_outputs_fall_through_to_next_agent(fakes: Fakes, repo: Path, mode: 
     )
     assert record["status"] == "succeeded"
     claude = [outcome for agent, outcome in executes(engine, record["id"]) if agent == "claude"]
-    assert claude and claude[0] in ("garbage", "failed")
+    assert claude and claude[0] == expected
 
 
 def test_hang_hits_idle_timeout_and_moves_on(fakes: Fakes, repo: Path) -> None:
@@ -492,3 +503,253 @@ def test_helpers() -> None:
     duplicate = '{"subtasks": [{"id": "a", "task": "x"}, {"id": "a", "task": "y"}]}'
     assert parse_subtasks(duplicate, 6) is None
     assert waves([{"id": "a", "depends_on": ["a"]}]) is None
+
+
+def one_rung(engine: Engine, agent: str, write: bool = True, complexity: int = 1) -> object:
+    kind = "edit" if write else "explain"
+    return build_plan(
+        engine.config, Classification(complexity, kind, "low", write, 1), available={agent}
+    )
+
+
+def test_unexpected_exception_marks_run_failed(
+    fakes: Fakes, repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from timonel import gitops
+
+    engine = with_env(fakes, FAKE_CLASSIFICATION=SIMPLE)
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(gitops, "create_worktree", boom)
+    record = engine.run(RunOptions(task="go", repo=repo, plan=one_rung(engine, "copilot")))  # type: ignore[arg-type]
+    assert record["status"] == "failed"
+    assert "disk full" in record["error"]
+
+
+def test_failure_mentioning_429_is_not_a_rate_limit(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes, FAKE_MODE="noisy_failure")
+    record = engine.run(RunOptions(task="go", repo=repo, plan=one_rung(engine, "copilot")))  # type: ignore[arg-type]
+    assert executes(engine, record["id"])[0] == ("copilot", "failed")
+    assert engine.ledger.cooldowns() == {}
+
+
+def test_usage_limit_in_json_result_triggers_cooldown(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes, FAKE_MODE="limit_json")
+    plan = one_rung(engine, "claude", write=False)
+    engine.run(RunOptions(task="explain", repo=repo, plan=plan))  # type: ignore[arg-type]
+    assert "claude" in engine.ledger.cooldowns()
+
+
+def test_cooling_agent_is_skipped_inside_the_ladder(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes, FAKE_MODE_CLAUDE="rate_limit")
+    plan = build_plan(
+        engine.config,
+        Classification(1, "explain", "low", False, 0),
+        available={"claude", "codex"},
+    )
+    assert [step.agent for step in plan.steps()].count("claude") >= 2
+    record = engine.run(RunOptions(task="[[say:ok]] explain", repo=repo, plan=plan))
+    assert [agent for agent, _ in executes(engine, record["id"])].count("claude") == 1
+
+
+def test_cancel_during_verification_is_cancelled(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes)
+    slow = ((sys.executable, "-c", "print('verifying', flush=True); import time; time.sleep(60)"),)
+    options = RunOptions(
+        task="[[edit all:a.txt=1]] go",
+        repo=repo,
+        plan=one_rung(engine, "copilot"),
+        verify=slow,  # type: ignore[arg-type]
+    )
+    run_id = engine.start(options)
+
+    def watch(identifier: str, kind: str, data: dict[str, object]) -> None:
+        if kind == "verify.started":
+            threading.Timer(0.5, lambda: engine.cancel(identifier)).start()
+
+    engine.on_event = watch
+    record = engine.run(options, run_id)
+    assert record["status"] == "cancelled"
+    assert executes(engine, run_id) == [("copilot", "succeeded")]
+
+
+def test_cancel_during_review_is_cancelled(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes, FAKE_MODE_CODEX="silent_hang")
+    plan = build_plan(
+        engine.config, Classification(3, "edit", "low", True, 1), available={"claude", "codex"}
+    )
+    options = RunOptions(task="[[edit claude:a.txt=1]] go", repo=repo, plan=plan)
+    run_id = engine.start(options)
+
+    def watch(identifier: str, kind: str, data: dict[str, object]) -> None:
+        if kind == "attempt.started" and data["role"] == "review":
+            threading.Timer(0.5, lambda: engine.cancel(identifier)).start()
+
+    engine.on_event = watch
+    record = engine.run(options, run_id)
+    assert record["status"] == "cancelled"
+
+
+def test_verification_gets_a_minimal_environment(fakes: Fakes, repo: Path, tmp_path: Path) -> None:
+    dump = tmp_path / "env.json"
+    script = f"import json, os; open(r'{dump}', 'w').write(json.dumps(dict(os.environ)))"
+    engine = with_env(
+        fakes, AWS_SECRET_ACCESS_KEY="aws-secret-value-123", OTHER_TOKEN="tok-123456789"
+    )
+    engine.run(
+        RunOptions(
+            task="[[edit all:a.txt=1]] go",
+            repo=repo,
+            plan=one_rung(engine, "copilot"),  # type: ignore[arg-type]
+            verify=((sys.executable, "-c", script),),
+        )
+    )
+    seen = json.loads(dump.read_text())
+    assert "PATH" in seen
+    for name in ("AWS_SECRET_ACCESS_KEY", "OTHER_TOKEN", "DEEPSEEK_API_KEY", "GH_TOKEN"):
+        assert name not in seen
+
+
+def test_nested_event_data_is_redacted(fakes: Fakes, repo: Path) -> None:
+    secret = fakes.env["DEEPSEEK_API_KEY"]
+    review = json.dumps({"approve": True, "issues": [f"key {secret} leaked"]})
+    classification = json.dumps(
+        {"complexity": 3, "kind": "edit", "risk": "low", "needs_write": True, "estimated_files": 1}
+    )
+    engine = with_env(fakes, FAKE_CLASSIFICATION=classification, FAKE_REVIEW=review)
+    record = engine.run(RunOptions(task="[[edit claude:a.txt=1]] go", repo=repo))
+    events = json.dumps(engine.ledger.events(record["id"]))
+    assert secret not in events
+    assert "[REDACTED] leaked" in events
+
+
+def test_resolved_secrets_are_added_to_the_redactor(
+    fakes: Fakes, repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import timonel.adapters as adapters
+
+    env = dict(fakes.env)
+    env.pop("DEEPSEEK_API_KEY")
+    monkeypatch.setattr(adapters, "lookup_secret", lambda name, environ: "keyring-secret-987654")
+    engine = Engine(make_config(), Ledger(), environ=env)
+    plan = one_rung(engine, "deepseek", write=False)
+    record = engine.run(
+        RunOptions(task="[[say:keyring-secret-987654]] explain", repo=repo, plan=plan)
+    )  # type: ignore[arg-type]
+    assert record["summary"] == "[REDACTED]"
+
+
+def test_oversized_argument_prompt_is_a_launch_error(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes)
+    plan = one_rung(engine, "copilot", write=False)
+    record = engine.run(RunOptions(task="x" * 200_000, repo=repo, plan=plan))  # type: ignore[arg-type]
+    assert {outcome for _, outcome in executes(engine, record["id"])} == {"launch_error"}
+    assert "prompt_via: stdin" in engine.ledger.attempts(record["id"])[0]["error"]
+
+
+def test_decomposed_read_only_subtask_still_runs_in_a_worktree(fakes: Fakes, repo: Path) -> None:
+    subtasks = {
+        "subtasks": [
+            {
+                "id": "a",
+                "task": "[[edit all:a.txt=A]] explain and document the parser",
+                "depends_on": [],
+            },
+            {"id": "b", "task": "[[edit all:b.txt=B]] review the cache", "depends_on": []},
+        ]
+    }
+    engine = with_env(fakes, FAKE_PLAN=json.dumps(subtasks), FAKE_CLASSIFICATION=SIMPLE)
+    record = engine.run(RunOptions(task="split me", repo=repo, decompose=True))
+    assert record["status"] == "succeeded", record
+    assert not (repo / "a.txt").exists()
+    assert all(child["write"] for child in engine.ledger.child_runs(record["id"]))
+
+
+def test_cancelled_race_is_cancelled(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes, FAKE_CLASSIFICATION=SIMPLE, FAKE_MODE="silent_hang")
+    options = RunOptions(task="go", repo=repo, race=True)
+    run_id = engine.start(options)
+
+    def watch(identifier: str, kind: str, data: dict[str, object]) -> None:
+        if kind == "race.started":
+            threading.Timer(1.0, lambda: engine.cancel(run_id)).start()
+
+    engine.on_event = watch
+    record = engine.run(options, run_id)
+    assert record["status"] == "cancelled"
+    assert {child["status"] for child in engine.ledger.child_runs(run_id)} <= {
+        "cancelled",
+        "discarded",
+    }
+
+
+def test_resume_uses_stored_verification_and_refuses_parents(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes)
+    plan = build_plan(engine.config, Classification(1, "edit", "low", True, 1))
+    options = RunOptions(
+        task="[[edit copilot:result.txt=bad]] [[edit claude:result.txt=good]] go",
+        repo=repo,
+        plan=plan,
+        verify=CHECK_GOOD,
+    )
+    run_id = engine.start(options)
+    engine.ledger.update_run(
+        run_id,
+        plan={**plan.to_dict(), "verify": [list(CHECK_GOOD[0])]},
+        status="interrupted",
+        write=True,
+    )
+    resumed = engine.resume(run_id)
+    assert resumed["status"] == "succeeded"
+    assert executes(engine, run_id)[0] == ("copilot", "verify_failed")
+    engine.ledger.create_run(
+        "kid00000", parent_id=run_id, task="t", repo=str(repo), profile="balanced", status="failed"
+    )
+    engine.ledger.update_run(run_id, status="interrupted")
+    with pytest.raises(RunError, match="start it again"):
+        engine.resume(run_id)
+
+
+def test_tampered_worktree_pointer_is_refused(fakes: Fakes, repo: Path) -> None:
+    from timonel import gitops
+    from timonel.gitops import GitError
+
+    engine = with_env(fakes)
+    record = engine.run(
+        RunOptions(task="[[edit all:a.txt=1]] go", repo=repo, plan=one_rung(engine, "copilot"))  # type: ignore[arg-type]
+    )
+    worktree = Path(record["worktree"])
+    (worktree / "evil").mkdir()
+    (worktree / ".git").write_text(f"gitdir: {worktree / 'evil'}\n", encoding="utf-8")
+    with pytest.raises(GitError, match="tampered"):
+        gitops.git(worktree, "status")
+    (worktree / ".git").unlink()
+    with pytest.raises(GitError, match="missing or replaced"):
+        gitops.git(worktree, "status")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need privileges on Windows")
+def test_symlink_into_dot_git_or_relative_escape_is_rejected(fakes: Fakes, repo: Path) -> None:
+    engine = with_env(fakes)
+    for target in ("sub/../../outside", ".git/config"):
+        record = engine.run(
+            RunOptions(
+                task=f"[[link copilot:leak={target}]] [[edit copilot:x.txt=1]] go",
+                repo=repo,
+                plan=one_rung(engine, "copilot"),  # type: ignore[arg-type]
+            )
+        )
+        assert record["status"] == "failed", target
+        assert "symlink points outside" in record["error"]
+
+
+def test_next_ladder_start() -> None:
+    from timonel.engine import next_ladder_start
+
+    plan = build_plan(make_config(), Classification(1, "edit", "low", True, 1))
+    sizes = [len(ladder) for ladder in plan.ladders]
+    assert next_ladder_start(plan, 0) == sizes[0]
+    assert next_ladder_start(plan, sizes[0]) == sizes[0] + sizes[1]
+    assert next_ladder_start(plan, 999) == sum(sizes)

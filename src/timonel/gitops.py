@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import os
+import posixpath
 import subprocess
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path, PurePosixPath
 
 from timonel.ledger import data_dir
+from timonel.proc import which
 
 IDENTITY = [
     "-c",
@@ -16,6 +19,7 @@ IDENTITY = [
     "-c",
     "commit.gpgsign=false",
 ]
+HARDENING = ["-c", "core.fsmonitor=false", "-c", f"core.hooksPath={os.devnull}"]
 
 
 class GitError(Exception):
@@ -34,11 +38,40 @@ class DiffSummary:
         return self.insertions + self.deletions
 
 
+@cache
+def git_executable() -> str:
+    found = which("git")
+    if found is None:
+        raise GitError("git not found on PATH")
+    return found
+
+
+def check_worktree_pointer(path: Path) -> None:
+    pointer = path / ".git"
+    if not pointer.is_file():
+        raise GitError(f"{path}: worktree .git pointer is missing or replaced")
+    text = pointer.read_text(encoding="utf-8", errors="replace").strip()
+    if not text.startswith("gitdir:"):
+        raise GitError(f"{path}: worktree .git pointer was tampered with")
+    target = Path(text.removeprefix("gitdir:").strip())
+    resolved = (path / target).resolve() if not target.is_absolute() else target.resolve()
+    inside = resolved == path.resolve() or path.resolve() in resolved.parents
+    if inside or resolved.parent.name != "worktrees":
+        raise GitError(f"{path}: worktree .git pointer was tampered with")
+
+
+def is_managed_worktree(path: Path) -> bool:
+    root = (data_dir() / "worktrees").resolve()
+    return root in path.resolve().parents
+
+
 def git(repo: Path, *args: str, check: bool = True, timeout: float = 120) -> str:
+    if is_managed_worktree(repo):
+        check_worktree_pointer(repo)
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
     try:
         completed = subprocess.run(
-            ["git", *args],
+            [git_executable(), *HARDENING, *args],
             cwd=repo,
             capture_output=True,
             text=True,
@@ -91,6 +124,16 @@ def create_worktree(repo: Path, run_id: str, base: str | None = None) -> tuple[P
     return target, branch, base_ref
 
 
+def attach_worktree(repo: Path, run_id: str, branch: str) -> Path:
+    target = worktrees_root(repo) / run_id
+    if target.is_dir() and (target / ".git").is_file():
+        return target
+    git(repo, "worktree", "prune")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    git(repo, "worktree", "add", str(target), branch)
+    return target
+
+
 def commit_all(worktree: Path, message: str) -> bool:
     git(worktree, "add", "-A")
     if not git(worktree, "status", "--porcelain").strip():
@@ -121,12 +164,12 @@ def unsafe_paths(repo: Path, base: str, ref: str) -> list[str]:
             problems.append(f"{path}: path escapes the repository")
             continue
         if mode == "120000":
-            target = git(repo, "cat-file", "-p", f"{ref}:{path}").strip()
-            resolved = PurePosixPath(os.path.normpath(str(pure.parent / target)))
+            target = git(repo, "cat-file", "-p", f"{ref}:{path}").strip().replace("\\", "/")
+            resolved = PurePosixPath(posixpath.normpath(str(pure.parent / target)))
             if (
                 target.startswith(("/", "\\"))
                 or ":" in target
-                or (resolved.parts and resolved.parts[0] == "..")
+                or (resolved.parts and resolved.parts[0].lower() in ("..", ".git"))
             ):
                 problems.append(f"{path}: symlink points outside the repository ({target})")
     return problems

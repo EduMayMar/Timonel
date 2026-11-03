@@ -81,8 +81,12 @@ def test_cancel_kills_whole_tree(tmp_path: Path) -> None:
         "time.sleep(60)\n"
     )
     cancel = threading.Event()
-    threading.Timer(1.5, cancel.set).start()
-    result = run_process([PY, "-c", script], cwd=tmp_path, env=ENV, cancel=cancel)
+
+    def on_line(line: str) -> None:
+        if "ready" in line:
+            cancel.set()
+
+    result = run_process([PY, "-c", script], cwd=tmp_path, env=ENV, cancel=cancel, on_line=on_line)
     assert result.cancelled
     grandchild = int(marker.read_text())
     deadline = time.monotonic() + 5
@@ -91,6 +95,7 @@ def test_cancel_kills_whole_tree(tmp_path: Path) -> None:
     assert not pid_alive(grandchild)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="process reaping differs on Windows")
 def test_keyboard_interrupt_kills_child(tmp_path: Path) -> None:
     started: list[int] = []
 
@@ -111,7 +116,7 @@ def test_keyboard_interrupt_kills_child(tmp_path: Path) -> None:
     deadline = time.monotonic() + 5
     while pid_alive(started[0]) and time.monotonic() < deadline:
         time.sleep(0.1)
-    assert not pid_alive(started[0]) or os.name == "nt"
+    assert not pid_alive(started[0])
 
 
 def test_missing_command() -> None:
@@ -181,3 +186,70 @@ def test_plain_batch_shim_refuses_metacharacters(tmp_path: Path) -> None:
         with pytest.raises(LaunchError, match="metacharacters"):
             resolve_launch(["tool.cmd", evil], path=str(tmp_path), windows=True)
     assert npm_shim_script(tmp_path / "missing.cmd") is None
+
+
+def test_kill_is_fast(tmp_path: Path) -> None:
+    started = time.monotonic()
+    result = run_process(
+        [PY, "-c", "import time; time.sleep(60)"],
+        cwd=tmp_path,
+        env=ENV,
+        total_timeout_s=0.5,
+        idle_timeout_s=30,
+    )
+    assert result.timed_out
+    assert time.monotonic() - started < 2.5
+
+
+def test_orphaned_background_process_does_not_block_completion(tmp_path: Path) -> None:
+    script = (
+        "import subprocess, sys\n"
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        "print('result ready', flush=True)\n"
+    )
+    started = time.monotonic()
+    result = run_process([PY, "-c", script], cwd=tmp_path, env=ENV, idle_timeout_s=20)
+    assert result.exit_code == 0
+    assert not result.idle_timed_out
+    assert "result ready" in result.output
+    assert time.monotonic() - started < 10
+
+
+def test_last_line_without_newline_is_kept(tmp_path: Path) -> None:
+    result = run_process(
+        [PY, "-c", "import sys; sys.stdout.write('a\\nno newline')"], cwd=tmp_path, env=ENV
+    )
+    assert result.output.endswith("no newline")
+
+
+def test_capture_keeps_the_tail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import timonel.proc as proc
+
+    monkeypatch.setattr(proc, "MAX_CAPTURE", 50)
+    result = run_process(
+        [PY, "-c", "print('\\n'.join(f'line {i}' for i in range(100)))"], cwd=tmp_path, env=ENV
+    )
+    assert "line 99" in result.output
+    assert "line 0\n" not in result.output
+    assert len(result.output) <= 60
+
+
+def test_which_ignores_current_directory_on_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import timonel.proc as proc
+
+    planted = tmp_path / "evil.cmd"
+    planted.write_text("@echo off\r\n", encoding="utf-8")
+    planted.chmod(0o755)
+    elsewhere = tmp_path / "bin"
+    elsewhere.mkdir()
+    monkeypatch.setattr(proc.shutil, "which", lambda command, path=None: str(planted))
+    assert proc.which("evil", path=str(elsewhere), windows=True) is None
+    monkeypatch.setattr(
+        proc.shutil, "which", lambda command, path=None: str(elsewhere / "good.exe")
+    )
+    assert proc.which("good", path=str(elsewhere), windows=True) == str(elsewhere / "good.exe")
+    assert proc.which(str(planted), path=str(elsewhere), windows=True) == str(
+        elsewhere / "good.exe"
+    )

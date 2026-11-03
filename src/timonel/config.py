@@ -15,10 +15,29 @@ PromptVia = Literal["arg", "stdin"]
 
 PLACEHOLDERS = frozenset({"prompt", "model", "effort", "timeout_s"})
 PLACEHOLDER_RE = re.compile(r"\{([a-z_]+)\}")
-DANGEROUS_MARKERS = ("--dangerously", "--yolo", "danger-full-access", "bypasspermissions")
+DANGEROUS_MARKERS = (
+    "--dangerously",
+    "--yolo",
+    "danger-full-access",
+    "bypasspermissions",
+    "approval_policy=never",
+    "--allow-tool=shell",
+)
 DANGEROUS_EXACT = frozenset({"--allow-all", "--allow-all-paths", "--allow-all-urls"})
 ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 TIERS = (1, 2, 3, 4)
+EXECUTION_FIELDS = frozenset(
+    {
+        "max_escalations",
+        "review_min_tier",
+        "cooldown_minutes",
+        "total_timeout_s",
+        "idle_timeout_s",
+        "verify",
+        "verify_timeout_s",
+        "verify_env",
+    }
+)
 
 
 class ConfigError(Exception):
@@ -92,6 +111,7 @@ class Execution:
     idle_timeout_s: int = 300
     verify: tuple[tuple[str, ...], ...] = ()
     verify_timeout_s: int = 900
+    verify_env: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -357,6 +377,9 @@ def build_agent(name: str, raw: Any, check: Validator) -> Agent | None:
         check.fail((*path, "prompt_args"), "prompt_via is 'arg' but no token contains {prompt}")
     if prompt_via == "stdin" and any("{prompt}" in token for token in prompt_args):
         check.fail((*path, "prompt_args"), "prompt_via is 'stdin' so {prompt} must not appear")
+    pty = check.boolean(data.get("pty"), (*path, "pty"), False)
+    if pty and prompt_via == "stdin":
+        check.fail((*path, "pty"), "a pseudo-terminal agent needs prompt_via: arg")
     return Agent(
         name=name,
         command=command,
@@ -375,7 +398,7 @@ def build_agent(name: str, raw: Any, check: Validator) -> Agent | None:
         ),
         verified=check.boolean(data.get("verified"), (*path, "verified"), False),
         prompt_via=prompt_via,
-        pty=check.boolean(data.get("pty"), (*path, "pty"), False),
+        pty=pty,
         base_args=check.template(data.get("base_args"), (*path, "base_args")),
         read_args=check.template(data.get("read_args"), (*path, "read_args")),
         write_args=check.template(data.get("write_args"), (*path, "write_args")),
@@ -447,11 +470,15 @@ def build_profile(name: str, raw: Any, check: Validator) -> Profile:
         for index, tier in enumerate(skip_raw):
             skip.add(check.integer(tier, (*path, "skip_tiers", str(index)), 0, 1, 4))
     max_escalations = data.get("max_escalations")
+    min_tier = check.integer(data.get("min_tier"), (*path, "min_tier"), 1, 1, 4)
+    max_tier = check.integer(data.get("max_tier"), (*path, "max_tier"), 4, 1, 4)
+    if min_tier > max_tier:
+        check.fail((*path, "min_tier"), f"min_tier {min_tier} is above max_tier {max_tier}")
     return Profile(
         name=name,
         start_offset=check.integer(data.get("start_offset"), (*path, "start_offset"), 0, -3, 3),
-        min_tier=check.integer(data.get("min_tier"), (*path, "min_tier"), 1, 1, 4),
-        max_tier=check.integer(data.get("max_tier"), (*path, "max_tier"), 4, 1, 4),
+        min_tier=min_tier,
+        max_tier=max_tier,
         skip_tiers=frozenset(skip - {0}),
         max_escalations=None
         if max_escalations is None
@@ -462,6 +489,13 @@ def build_profile(name: str, raw: Any, check: Validator) -> Profile:
 def build_execution(raw: Any, check: Validator) -> Execution:
     path = ("execution",)
     data = check.mapping(raw, path)
+    for key in data:
+        if key not in EXECUTION_FIELDS:
+            check.fail((*path, str(key)), "unknown field")
+    verify_env = check.strings(data.get("verify_env"), (*path, "verify_env"))
+    for index, name in enumerate(verify_env):
+        if not ENV_NAME_RE.match(name):
+            check.fail((*path, "verify_env", str(index)), "invalid environment variable name")
     verify_raw = data.get("verify") or []
     verify: list[tuple[str, ...]] = []
     if not isinstance(verify_raw, list):
@@ -492,6 +526,7 @@ def build_execution(raw: Any, check: Validator) -> Execution:
         verify_timeout_s=check.integer(
             data.get("verify_timeout_s"), (*path, "verify_timeout_s"), 900, 1, 86400
         ),
+        verify_env=verify_env,
     )
 
 

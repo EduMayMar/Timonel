@@ -27,6 +27,10 @@ def app(fakes: Fakes, repo: Path, ledger: Ledger, home: Path) -> Iterator[App]:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     yield instance
+    for run_id in list(instance.engine.cancels):
+        instance.engine.cancel(run_id)
+    for thread in instance.threads.values():
+        thread.join(30)
     server.shutdown()
     server.server_close()
 
@@ -50,7 +54,7 @@ class Client:
         connection = http.client.HTTPConnection("127.0.0.1", self.app.port, timeout=30)
         headers = {"Host": host or f"127.0.0.1:{self.app.port}"}
         if cookie:
-            headers["Cookie"] = f"timonel_session={self.app.token}"
+            headers["Cookie"] = f"timonel_session_{self.app.port}={self.app.session}"
         if method != "GET":
             if origin == "same":
                 headers["Origin"] = f"http://127.0.0.1:{self.app.port}"
@@ -79,8 +83,11 @@ def test_token_login_sets_strict_cookie_and_strips_token(app: App) -> None:
     status, headers, _ = client.request("GET", f"/?token={app.token}", cookie=False)
     assert status == 303
     assert headers["location"] == "/"
+    assert headers["set-cookie"].startswith(f"timonel_session_{app.port}={app.session};")
+    assert app.token not in headers["set-cookie"]
     assert "HttpOnly" in headers["set-cookie"] and "SameSite=Strict" in headers["set-cookie"]
     assert client.request("GET", "/?token=wrong", cookie=False)[0] == 401
+    assert client.request("GET", f"/?token={app.token}", cookie=False)[0] == 401
     assert client.request("GET", "/", cookie=False)[0] == 401
     status, headers, body = client.request("GET", "/")
     assert status == 200
@@ -128,7 +135,7 @@ def test_bad_bodies(app: App) -> None:
         body=b"not json",
         headers={
             "Host": f"127.0.0.1:{app.port}",
-            "Cookie": f"timonel_session={app.token}",
+            "Cookie": f"timonel_session_{app.port}={app.session}",
             "Origin": f"http://127.0.0.1:{app.port}",
             "X-CSRF-Token": app.csrf,
             "Content-Type": "application/json",
@@ -159,7 +166,10 @@ def test_run_flow_with_edited_plan_and_sse(app: App, repo: Path) -> None:
     connection.request(
         "GET",
         f"/api/runs/{run_id}/events",
-        headers={"Host": f"127.0.0.1:{app.port}", "Cookie": f"timonel_session={app.token}"},
+        headers={
+            "Host": f"127.0.0.1:{app.port}",
+            "Cookie": f"timonel_session_{app.port}={app.session}",
+        },
     )
     response = connection.getresponse()
     assert response.getheader("Content-Type", "").startswith("text/event-stream")
@@ -236,6 +246,7 @@ def test_cancel_running_task(app: App, fakes: Fakes) -> None:
     time.sleep(1.5)
     assert client.json("POST", f"/api/runs/{run_id}/cancel")[0] == 200
     app.threads[run_id].join(20)
+    assert not app.threads[run_id].is_alive()
     assert client.json("GET", f"/api/runs/{run_id}")[1]["status"] == "cancelled"  # type: ignore[index]
     assert client.json("POST", f"/api/runs/{run_id}/discard")[1]["status"] == "discarded"  # type: ignore[index]
 
@@ -289,3 +300,50 @@ def test_secrets_never_reach_the_ui(app: App, fakes: Fakes) -> None:
     app.threads[run_id].join(20)
     for path in (f"/api/runs/{run_id}", f"/api/runs/{run_id}/events", "/api/state", "/api/runs"):
         assert secret.encode() not in client.request("GET", path)[2]
+
+
+def test_negative_content_length_and_event_resume(app: App) -> None:
+    connection = http.client.HTTPConnection("127.0.0.1", app.port, timeout=10)
+    connection.putrequest("POST", "/api/plan", skip_host=True)
+    for name, value in (
+        ("Host", f"127.0.0.1:{app.port}"),
+        ("Cookie", f"timonel_session_{app.port}={app.session}"),
+        ("Origin", f"http://127.0.0.1:{app.port}"),
+        ("X-CSRF-Token", app.csrf),
+        ("Content-Type", "application/json"),
+        ("Content-Length", "-5"),
+    ):
+        connection.putheader(name, value)
+    connection.endheaders()
+    assert connection.getresponse().status == 400
+    client = Client(app)
+    plan = {
+        "classification": {
+            "complexity": 1,
+            "kind": "explain",
+            "risk": "low",
+            "needs_write": False,
+            "estimated_files": 0,
+        },
+        "ladders": [[{"tier": 1, "agent": "codex"}]],
+    }
+    _status, started = client.json(
+        "POST", "/api/runs", {"task": "[[say:hi]] explain", "plan": plan}
+    )
+    run_id = started["run_id"]  # type: ignore[index]
+    app.threads[run_id].join(30)
+    events = app.engine.ledger.events(run_id)
+    last = events[-2]["id"]
+    stream = http.client.HTTPConnection("127.0.0.1", app.port, timeout=30)
+    stream.request(
+        "GET",
+        f"/api/runs/{run_id}/events",
+        headers={
+            "Host": f"127.0.0.1:{app.port}",
+            "Cookie": f"timonel_session_{app.port}={app.session}",
+            "Last-Event-ID": str(last),
+        },
+    )
+    body = stream.getresponse().read().decode()
+    assert body.count("id: ") == 1
+    assert "event: run.finished" in body

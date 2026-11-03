@@ -120,7 +120,8 @@ def test_parse_claude_json() -> None:
     "raw", ['{"result": ', "not json", "[1, 2]", '{"subtype": "error_max_turns", "result": "x"}']
 )
 def test_parse_claude_json_failures(raw: str) -> None:
-    assert parse_output(AGENTS["claude"], raw).is_error
+    output = parse_output(AGENTS["claude"], raw)
+    assert output.is_error or not output.parsed
 
 
 def test_parse_stream_json_uses_last_result() -> None:
@@ -137,7 +138,7 @@ def test_parse_stream_json_uses_last_result() -> None:
     output = parse_output(agent, raw)
     assert output.text == "final"
     assert output.cost_usd == 0.1
-    assert parse_output(agent, json.dumps({"type": "assistant"})).is_error
+    assert not parse_output(agent, json.dumps({"type": "assistant"})).parsed
 
 
 def test_parse_codex_jsonl() -> None:
@@ -157,13 +158,13 @@ def test_parse_codex_jsonl() -> None:
     assert (output.text, output.is_error, output.tokens_in) == ("done", False, 10)
     failed = parse_output(AGENTS["codex"], raw + "\n" + json.dumps({"type": "turn.failed"}))
     assert failed.is_error
-    assert parse_output(AGENTS["codex"], "plain text").is_error
+    assert not parse_output(AGENTS["codex"], "plain text").parsed
 
 
 def test_parse_text_strips_ansi() -> None:
     output = parse_output(AGENTS["agy"], "\x1b[32mhello\x1b[0m\r\n")
     assert output.text == "hello"
-    assert parse_output(AGENTS["agy"], "  \n").is_error
+    assert not parse_output(AGENTS["agy"], "  \n").parsed
     assert strip_ansi("a\x1b]0;title\x07b\rc") == "ab\nc"
 
 

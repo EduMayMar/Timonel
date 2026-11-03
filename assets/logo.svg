@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128" role="img" aria-labelledby="t">
+  <title id="t">Timonel</title>
+  <g fill="none" stroke="#8a5a12" stroke-width="3" stroke-linecap="round">
+    <circle cx="32" cy="32" r="17"/>
+    <circle cx="32" cy="32" r="5" fill="#13233a" stroke="#13233a"/>
+    <path d="M32 3v12M32 49v12M3 32h12M49 32h12M11.5 11.5l8.5 8.5M44 44l8.5 8.5M52.5 11.5L44 20M20 44l-8.5 8.5"/>
+    <path d="M32 15v12M32 37v12M15 32h12M37 32h12" stroke="#13233a" stroke-width="2"/>
+  </g>
+</svg>

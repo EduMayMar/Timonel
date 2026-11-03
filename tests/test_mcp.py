@@ -93,6 +93,7 @@ def test_plan_run_status(fakes: Fakes, repo: Path, ledger: Ledger) -> None:
     run_id = started["result"]["structuredContent"]["run_id"]  # type: ignore[index]
     for thread in instance.threads:
         thread.join(30)
+        assert not thread.is_alive()
     status = exchange(instance, call(3, "timonel_status", {"run_id": run_id}))[0]
     content = status["result"]["structuredContent"]  # type: ignore[index]
     assert content["status"] == "succeeded"
@@ -117,3 +118,48 @@ def test_tool_errors_are_reported_not_raised(
     assert all(reply["result"]["isError"] for reply in replies[:4] + replies[5:])  # type: ignore[index]
     assert replies[4]["error"]["code"] == -32602  # type: ignore[index]
     time.sleep(0)
+
+
+def test_malformed_params_and_foreign_repos_are_contained(
+    fakes: Fakes, repo: Path, ledger: Ledger, tmp_path: Path
+) -> None:
+    other = tmp_path / "other"
+    other.mkdir()
+    from .conftest import run_git
+
+    run_git(other, "init", "-q")
+    instance = server(fakes, repo, ledger)
+    replies = exchange(
+        instance,
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": ["not", "an", "object"]},
+        call(2, "timonel_plan", {"task": "x", "repo": str(other)}),
+        call(3, "timonel_run", {"task": "x", "repo": str(other)}),
+    )
+    assert replies[0]["error"]["code"] == -32603  # type: ignore[index]
+    assert replies[1]["result"]["isError"]  # type: ignore[index]
+    assert "only works on the repository" in replies[2]["result"]["content"][0]["text"]  # type: ignore[index]
+    outside = McpServer(make_config(), ledger, cwd=tmp_path)
+    reply = exchange(outside, call(4, "timonel_plan", {"task": "x"}))[0]
+    assert reply["result"]["isError"]  # type: ignore[index]
+
+
+def test_stdio_entry_point_speaks_only_json(fakes: Fakes, repo: Path, home: Path) -> None:
+    import subprocess
+    import sys
+
+    messages = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+    ]
+    completed = subprocess.run(
+        [sys.executable, "-m", "timonel", "mcp"],
+        input="".join(json.dumps(m) + "\n" for m in messages),
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        env=fakes.env,
+        timeout=60,
+        check=True,
+    )
+    lines = completed.stdout.splitlines()
+    assert [json.loads(line)["id"] for line in lines] == [1, 2]
