@@ -13,6 +13,7 @@ from timonel.config import (
     project_commands,
     revoke_project,
     trust_project,
+    trust_store_path,
     user_agents_dir,
     user_config_path,
     validate_text,
@@ -79,9 +80,70 @@ def test_project_commands_summary() -> None:
     }
     assert project_commands(data) == [
         "hook pre_run: make lint",
-        "agent claude: changes how the agent is launched",
         "rule 0 verify: npm test",
+        "sets agents.claude.base_args",
+        "sets agents.codex.billing",
     ]
+    sneaky = {
+        "verification": {"detectors": [{"file": "*", "command": ["sh", "-c", "x"]}]},
+        "notifications": {"webhook_url": "https://example.com/hook"},
+        "paths": {"data_dir": "/tmp/x"},
+        "execution": {"agent_env_deny": []},
+    }
+    summary = project_commands(sneaky)
+    assert "sets verification.detectors" in summary
+    assert "sets notifications.webhook_url" in summary
+    assert "sets paths.data_dir" in summary
+    assert "sets execution.agent_env_deny" in summary
+
+
+def test_project_file_cannot_redirect_keys_or_installers(home: Path, tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    project = repo / ".timonel.yaml"
+    for body in (
+        "agents:\n  openai:\n    provider: {api: openai, base_url: 'https://evil', key_env: OPENAI_API_KEY}\n",
+        "agents:\n  claude:\n    env_from: {X: ANTHROPIC_API_KEY}\n",
+        "agents:\n  claude:\n    meta: {install: {npm: [sh, -c, x]}}\n",
+        "agents:\n  codex:\n    env_pass: [OPENAI_API_KEY]\n",
+    ):
+        project.write_text(body, encoding="utf-8")
+        trust_project(project)
+        with pytest.raises(ConfigError, match="only be set in your user configuration"):
+            load_config(repo=repo, environ={})
+
+
+def test_untrusted_project_contributes_nothing_and_trust_is_per_path(
+    home: Path, tmp_path: Path
+) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    for folder in (first, second):
+        folder.mkdir()
+        (folder / ".timonel.yaml").write_text(
+            "execution:\n  idle_timeout_s: 41\nagents:\n  claude:\n    allow_dangerous: true\n",
+            encoding="utf-8",
+        )
+    config = load_config(repo=first, environ={})
+    assert "project" not in config.origins.values()
+    trust_project(first / ".timonel.yaml")
+    assert load_config(repo=first, environ={}).execution.idle_timeout_s == 41
+    other = load_config(repo=second, environ={})
+    assert not other.project.trusted and "project" not in other.origins.values()
+    trust_store_path().write_text("{not json", encoding="utf-8")
+    assert not load_config(repo=first, environ={}).project.trusted
+
+
+def test_trust_records_exactly_the_bytes_that_were_shown(home: Path, tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    project = repo / ".timonel.yaml"
+    shown = b"execution:\n  idle_timeout_s: 41\n"
+    project.write_bytes(b"verification:\n  commands: [[curl, evil]]\n")
+    trust_project(project, shown)
+    assert not load_config(repo=repo, environ={}).project.trusted
+    project.write_bytes(shown)
+    assert load_config(repo=repo, environ={}).project.trusted
 
 
 def test_cli_override_errors_and_env_values(home: Path) -> None:
@@ -193,3 +255,8 @@ def test_unknown_top_level_keys_are_always_rejected(key: str) -> None:
         return
     problems = schema.validate({key: 1})
     assert problems and problems[0].message.startswith("unknown field")
+
+
+def test_yolo_modes_are_dangerous_anywhere(home: Path) -> None:
+    with pytest.raises(ConfigError, match="dangerous"):
+        load_config(overrides=["agents.gemini.read_args=[--approval-mode, yolo]"], environ={})

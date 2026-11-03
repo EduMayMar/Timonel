@@ -174,3 +174,38 @@ def test_rate_limit_patterns() -> None:
     assert is_rate_limited(AGENTS["claude"], patterns, "Claude AI usage limit reached|1700000000")
     assert is_rate_limited(AGENTS["deepseek"], patterns, "Insufficient Balance")
     assert not is_rate_limited(AGENTS["codex"], patterns, "SyntaxError on line 4290")
+
+
+def test_provider_keys_only_reach_agents_that_declare_them() -> None:
+    from timonel.adapters import build_env
+    from timonel.config import validate_text
+
+    config = validate_text("version: 1")
+    environ = {
+        "PATH": "/bin",
+        "OPENAI_API_KEY": "sk-openai",
+        "OPENROUTER_API_KEY": "sk-or",
+        "ANTHROPIC_API_KEY": "sk-ant",
+        "GEMINI_API_KEY": "gem",
+        "DEEPSEEK_API_KEY": "sk-ds",
+    }
+    codex = build_env(config.agents["codex"], config.agents, environ)
+    assert not {
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "DEEPSEEK_API_KEY",
+    } & set(codex)
+    claude = build_env(config.agents["claude"], config.agents, environ)
+    assert claude["ANTHROPIC_API_KEY"] == "sk-ant" and "OPENAI_API_KEY" not in claude
+    assert build_env(config.agents["gemini"], config.agents, environ)["GEMINI_API_KEY"] == "gem"
+    deepseek = build_env(config.agents["deepseek"], config.agents, environ)
+    assert deepseek["ANTHROPIC_AUTH_TOKEN"] == "sk-ds" and "DEEPSEEK_API_KEY" not in deepseek
+
+
+def test_strip_controls_removes_terminal_tricks() -> None:
+    from timonel.adapters import strip_controls
+
+    assert (
+        strip_controls("ok\x1b[8mhidden\x1b[0m\x07\x08 line\r\nnext\t!") == "okhidden line\nnext\t!"
+    )

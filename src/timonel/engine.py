@@ -540,6 +540,10 @@ class Engine:
                 shutil.rmtree(prompt_dir, ignore_errors=True)
 
     def ask_provider(self, agent: Agent, step: Step, prompt: str) -> AttemptResult:
+        if agent.provider is not None and agent.provider.key_env:
+            key = lookup_secret(agent.provider.key_env, self.environ)
+            if key:
+                self.redact.add(key)
         try:
             reply = call_provider(agent, step.model, prompt, self.environ)
         except ProviderError as error:
@@ -965,7 +969,7 @@ class Engine:
             if unsafe:
                 return False, "unsafe changes rejected: " + "; ".join(unsafe)
             passed, report = self.verify(run_id, cwd, verify_commands)
-            if not passed or rounds >= settings.max_rounds:
+            if not passed:
                 return passed, report
 
     def mark_last_attempt(self, run_id: str, outcome: str, error: str) -> None:

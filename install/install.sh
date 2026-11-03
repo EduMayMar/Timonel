@@ -43,7 +43,7 @@ if [ -t 0 ]; then
   read -r answer || true
 elif { true </dev/tty; } 2>/dev/null; then
   read -r answer </dev/tty || true
-else
+elif [ -f "$0" ]; then
   read -r answer || true
 fi
 case "$answer" in

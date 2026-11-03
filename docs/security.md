@@ -9,8 +9,8 @@ limits.
 |---|---|---|
 | Your working copy | An agent makes a bad or malicious change | Edits happen in a separate git worktree on branch `timonel/<id>`. Nothing is merged without `timonel apply` or the *Apply* button. |
 | Files outside the repository | An agent writes a path with `..` or a symlink pointing outside | Every changed path is checked after each attempt; escaping paths and outward symlinks reject the attempt. Agents also run with their own sandbox flags (`--sandbox workspace-write`, `--permission-mode acceptEdits`). |
-| API keys | Keys leak to logs, the UI or another agent | Keys come only from environment variables or the OS keyring (`keyring` extra). `env_from` gives a key to one agent's process and removes it from every other agent and from verification commands. Outputs, errors, task text and events are redacted before they are stored or shown. Keys are never written to files. |
-| Router configuration | Repository content or agent output changes routing | Your user file is read from your configuration directory. A repository's `.timonel.yaml` is ignored until you run `timonel trust`, which shows every command it would add (hooks, verification commands, agent argv) and stores the file's SHA-256; any later change to the file revokes the trust until you review it again. Classifier, reviewer and planner answers are parsed as data and validated against fixed schemas; they can change the tier and the task text, never agents, flags or commands. |
+| API keys | Keys leak to logs, the UI or another agent | Keys come only from environment variables or the OS keyring (`keyring` extra). `env_from` gives a key to one agent's process and removes it from every other agent and from verification commands. API key variables declared by any connector (`OPENAI_API_KEY`, `GROQ_API_KEY`…) are removed from every CLI agent unless that agent lists the name in `env_pass` (Claude Code gets `ANTHROPIC_API_KEY`, Gemini CLI gets `GEMINI_API_KEY`). Provider keys read from the keyring are added to the redaction list. Outputs, errors, task text and events are redacted before they are stored or shown. Keys are never written to files. |
+| Router configuration | Repository content or agent output changes routing | Your user file is read from your configuration directory. A repository's `.timonel.yaml` is ignored until you run `timonel trust`, which prints the whole file, lists every command and every agent, verification, notification, path and privacy setting it changes, and stores the SHA-256 of exactly the bytes it showed. A project file can never set an agent's `provider`, `env_from`, `env_pass` or install metadata, so it cannot send your keys elsewhere or swap an installer; any later change to the file revokes the trust until you review it again. Classifier, reviewer and planner answers are parsed as data and validated against fixed schemas; they can change the tier and the task text, never agents, flags or commands. |
 | Your machine | Shell injection through prompts | No `shell=True` anywhere. Commands are argument lists. Placeholders are filled once and never re-expanded. On Windows, npm `.cmd` shims are resolved to `node script.js`; any other batch shim refuses arguments containing cmd.exe metacharacters. |
 | Your machine | A planted `claude.cmd` or `git.exe` in the repository | On Windows, executables are only accepted from folders listed in `PATH`, never from the current directory (`NoDefaultCurrentDirectoryInExePath` is also set). |
 | Your machine | Agent-controlled code runs during verification | Verification runs the project's own tests, which the agent may have edited. Timonel runs them with a minimal environment (`PATH`, home, temp and locale variables, plus names you list in `execution.verify_env`), so API keys and tokens in your shell are not visible to them. They are not sandboxed: only run Timonel on repositories and tasks you trust, as you would run their tests yourself. |
@@ -53,16 +53,17 @@ server with Ctrl+C cancels running agents and waits for them to stop.
 
 ## Installer (`timonel start`)
 
-- It never elevates privileges. Commands that need `sudo` or an administrator prompt are printed for
-  you to run.
+- It never elevates privileges. It only runs a command by itself when the program is the package
+  manager itself (`winget`, `brew`, `npm`…); anything else, including `sudo`, is printed for you to run.
 - It never pipes a download into a shell. When a vendor only offers an install script, Timonel downloads
-  it, shows it with its SHA-256 and asks before running it.
+  it, shows it (terminal control characters removed, and says how many lines it did not show and
+  where the full file is) with its SHA-256, and asks before running it. `--yes` never runs a script.
 - Official package managers come first (winget, Homebrew, npm…). Each command is explained, with its
   approximate size, before you choose install, skip, explain or quit.
 - `--dry-run` shows everything and changes nothing. `--yes` only applies to components you list with
   `--allow`.
 - Every executed action is appended to `audit.log` in the data directory with the command, exit code
-  and how to undo it. Progress is kept in `start-state.json`, so an interrupted run resumes.
+  and how to undo it. Completed installs are kept in `start-state.json`, so an interrupted run resumes; skipped steps are offered again next time.
 
 ## Accounts and API keys
 

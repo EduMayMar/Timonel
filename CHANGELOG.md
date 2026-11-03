@@ -34,8 +34,23 @@ All notable changes are documented here. The format follows
   `verification.commands`); old keys are migrated automatically.
 - A repository's `.timonel.yaml` is ignored until `timonel trust`, and again whenever it changes.
 
+### Security
+
+- Provider API key variables are hidden from CLI agents unless the agent lists them in `env_pass`.
+- `timonel trust` shows the whole file and stores the hash of what it showed; project files cannot set
+  agent providers, secret mappings or install metadata; the loaded file is the one that was hashed.
+- The installer only runs plain package-manager commands by itself, strips control characters from
+  script previews and says when a preview is truncated; declined scripts are deleted.
+- `yolo` approval modes are treated as dangerous wherever they appear.
+
 ### Fixed
 
+- Skipped installer steps are no longer remembered as done.
+- The Settings page validates every layer before writing and never leaves a half-written file.
+- Cross review now reviews the fixed change again instead of accepting it unseen.
+- `timonel start` adds new agents to your own or the default ladders instead of copying merged ones.
+- In Spanish and Portuguese a bare `s` (skip) is no longer read as "yes".
+- The Windows PATH refresh keeps your current PATH order first.
 - The web UI no longer lets a slow earlier page overwrite the page you navigated to.
 - `timonel demo --path` can run again on the same folder.
 

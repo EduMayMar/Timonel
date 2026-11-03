@@ -84,6 +84,11 @@ def answer_for(name: str, prompt: str) -> str:
             ),
         )
     if "TIMONEL_REVIEW" in prompt:
+        once = os.environ.get("FAKE_REVIEW_ONCE")
+        if once and Path(once).exists():
+            return json.dumps({"approve": True, "issues": []})
+        if once:
+            Path(once).write_text("rejected", encoding="utf-8")
         return os.environ.get("FAKE_REVIEW", json.dumps({"approve": True, "issues": []}))
     if "TIMONEL_PLAN" in prompt:
         return os.environ.get("FAKE_PLAN", json.dumps({"subtasks": []}))

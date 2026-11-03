@@ -39,11 +39,21 @@ def test_every_locale_file_on_disk_is_listed() -> None:
     assert sorted(path.stem for path in LOCALES.glob("*.json")) == sorted(i18n.LANGUAGES)
 
 
-def test_language_choice_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture
+def restore_language() -> object:
+    previous = i18n.current()
+    yield
+    i18n.set_language(previous)
+
+
+def test_language_choice_and_fallback(
+    monkeypatch: pytest.MonkeyPatch, restore_language: object
+) -> None:
     assert i18n.choose("auto", {"TIMONEL_LANG": "pt_BR"}) == "pt"
     assert i18n.choose("es", {}) == "es"
     assert i18n.choose("auto", {"LANG": "es_ES.UTF-8"}) == "es"
-    assert i18n.choose("auto", {"LANG": "C"}) in ("en", "es", "pt")
+    monkeypatch.setattr(i18n.locale, "getlocale", lambda *args: (None, None))
+    assert i18n.choose("auto", {"LANG": "C"}) == "en"
     i18n.set_language("es")
     assert i18n.t("wizard.installed", name="Git") == "Git está instalado."
     assert i18n.t("no.such.key") == "no.such.key"
@@ -113,3 +123,12 @@ def test_schema_language_enum_matches_catalogs() -> None:
     node = schema.node_at(("language",))
     assert node is not None
     assert sorted(node["enum"]) == sorted(["auto", *i18n.LANGUAGES])
+
+
+def test_every_literal_key_in_the_source_exists() -> None:
+    english = load("en")
+    source = LOCALES.parent
+    used: set[str] = set()
+    for path in source.rglob("*.py"):
+        used |= set(re.findall(r'\bt\(\s*"([a-z0-9_.A-Z-]+)"', path.read_text(encoding="utf-8")))
+    assert sorted(key for key in used if key not in english) == []

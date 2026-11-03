@@ -1928,6 +1928,12 @@
             "type": "string"
           }
         },
+        "env_pass": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "models_command": {
           "type": "array",
           "items": {

@@ -19,4 +19,4 @@ A single-file binary for Apple silicon, `timonel-macos-arm64`, is attached to ea
 `shasum -a 256 timonel-macos-arm64` against `SHA256SUMS`, then
 `chmod +x timonel-macos-arm64 && mv timonel-macos-arm64 ~/.local/bin/timonel`. Because it is not
 notarized, macOS may block the first run; allow it in System Settings → Privacy & Security, or use
-pipx instead.
+pipx instead. Intel Macs: there is no binary; use pipx.

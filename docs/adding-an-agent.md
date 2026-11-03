@@ -95,7 +95,8 @@ Rules that reviewers check:
 - If the CLI has no read-only mode, add `supports_read_only: false`; Timonel then never uses it for
   read-only work.
 - Secrets go through `env_from` or `api_key.env`, read from the environment or the system keyring. Never
-  put a key in the file.
+  put a key in the file. Other connectors' key variables are hidden from your agent; if the CLI
+  documents that it reads one (as Claude Code does with `ANTHROPIC_API_KEY`), list it in `env_pass`.
 - `install.drift` lists the package and the help commands for the nightly flag check.
 - `approx_size_mb` is measured (install it in a clean folder and look at the size), or left out.
 

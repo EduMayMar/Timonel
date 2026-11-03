@@ -56,8 +56,15 @@ timonel trust
 ```
 
 lists every command the file would add and asks for confirmation. Timonel stores the file's SHA-256 in
-`trusted-projects.json` in your configuration directory; if the file changes, it is ignored again (with
+`trusted-projects.json` in your configuration directory (the hash of exactly what it showed you); if the file changes, it is ignored again (with
 a warning) until you run `timonel trust` once more. `timonel trust --revoke` forgets it.
+
+A project file may not set an agent's `provider`, `env_from`, `env_pass` or install metadata; those
+belong in your user file.
+
+`timonel config set`, `timonel mode` and the Settings page rewrite your user file as plain YAML, so
+comments in it are not kept (a `.bak` copy of the previous file is). Use `timonel config edit` if you
+want to keep comments.
 
 ## The web UI
 

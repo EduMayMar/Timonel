@@ -1,9 +1,11 @@
 import os
 import subprocess
 import sys
+import types
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -14,6 +16,47 @@ from timonel.ledger import Ledger
 FAKE = Path(__file__).parent / "fakes" / "fake_agent.py"
 AGENTS = ("claude", "codex", "copilot", "agy")
 WINDOWS = os.name == "nt"
+
+
+class MemoryKeyring:
+    def __init__(self) -> None:
+        self.data: dict[tuple[str, str], str] = {}
+
+    def set_password(self, service: str, name: str, value: str) -> None:
+        self.data[(service, name)] = value
+
+    def get_password(self, service: str, name: str) -> str | None:
+        return self.data.get((service, name))
+
+    def delete_password(self, service: str, name: str) -> None:
+        if (service, name) not in self.data:
+            raise KeyError(name)
+        del self.data[(service, name)]
+
+
+def install_fake_keyring(monkeypatch: pytest.MonkeyPatch, backend: Any) -> None:
+    module = types.ModuleType("keyring")
+    errors = types.ModuleType("keyring.errors")
+
+    class KeyringError(Exception):
+        pass
+
+    errors.KeyringError = KeyringError  # type: ignore[attr-defined]
+    module.get_keyring = lambda: backend  # type: ignore[attr-defined]
+    for name in ("set_password", "get_password", "delete_password"):
+        setattr(module, name, getattr(backend, name))
+    monkeypatch.setitem(sys.modules, "keyring", module)
+    monkeypatch.setitem(sys.modules, "keyring.errors", errors)
+
+
+@pytest.fixture(autouse=True)
+def isolated_system(monkeypatch: pytest.MonkeyPatch) -> MemoryKeyring:
+    from timonel import wizard
+
+    backend = MemoryKeyring()
+    install_fake_keyring(monkeypatch, backend)
+    monkeypatch.setattr(wizard, "refresh_windows_path", lambda environ: False)
+    return backend
 
 
 def windows_launcher() -> bytes:

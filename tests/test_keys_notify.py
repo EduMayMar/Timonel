@@ -1,42 +1,11 @@
 import sys
-import types
-from typing import Any
 
 import pytest
 
 from timonel import keys, notify
 from timonel.config import Notifications
 
-
-class MemoryKeyring:
-    def __init__(self) -> None:
-        self.data: dict[tuple[str, str], str] = {}
-
-    def set_password(self, service: str, name: str, value: str) -> None:
-        self.data[(service, name)] = value
-
-    def get_password(self, service: str, name: str) -> str | None:
-        return self.data.get((service, name))
-
-    def delete_password(self, service: str, name: str) -> None:
-        if (service, name) not in self.data:
-            raise KeyError(name)
-        del self.data[(service, name)]
-
-
-def install_fake_keyring(monkeypatch: pytest.MonkeyPatch, backend: Any) -> None:
-    module = types.ModuleType("keyring")
-    errors = types.ModuleType("keyring.errors")
-
-    class KeyringError(Exception):
-        pass
-
-    errors.KeyringError = KeyringError  # type: ignore[attr-defined]
-    module.get_keyring = lambda: backend  # type: ignore[attr-defined]
-    for name in ("set_password", "get_password", "delete_password"):
-        setattr(module, name, getattr(backend, name))
-    monkeypatch.setitem(sys.modules, "keyring", module)
-    monkeypatch.setitem(sys.modules, "keyring.errors", errors)
+from .conftest import MemoryKeyring, install_fake_keyring
 
 
 def test_keys_store_present_delete(monkeypatch: pytest.MonkeyPatch) -> None:

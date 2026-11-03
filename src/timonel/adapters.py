@@ -9,6 +9,7 @@ from typing import Any
 
 from timonel.config import PLACEHOLDER_RE, Agent, Rung
 
+CONTROL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]")
 
 
@@ -85,7 +86,20 @@ def lookup_secret(name: str, environ: Mapping[str, str]) -> str | None:
 
 
 def secret_sources(agents: Mapping[str, Agent]) -> set[str]:
-    return {source for agent in agents.values() for source in agent.env_from.values()}
+    found: set[str] = set()
+    for agent in agents.values():
+        found.update(agent.env_from.values())
+        if agent.provider is not None and agent.provider.key_env:
+            found.add(agent.provider.key_env)
+        key_env = (agent.meta.get("api_key") or {}).get("env")
+        if key_env:
+            found.add(str(key_env))
+    return found
+
+
+def passed_through(agent: Agent) -> set[str]:
+    own = (agent.meta.get("api_key") or {}).get("env")
+    return {*agent.env_pass, *([str(own)] if own and not agent.env_from else [])}
 
 
 def denied(name: str, patterns: tuple[str, ...]) -> bool:
@@ -99,7 +113,7 @@ def build_env(
     deny: tuple[str, ...] = (),
 ) -> dict[str, str]:
     source = dict(os.environ if environ is None else environ)
-    blocked = secret_sources(agents)
+    blocked = secret_sources(agents) - passed_through(agent)
     env = {
         key: value for key, value in source.items() if key not in blocked and not denied(key, deny)
     }
@@ -150,6 +164,10 @@ def build_invocation(
 
 def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text).replace("\r\n", "\n").replace("\r", "\n")
+
+
+def strip_controls(text: str) -> str:
+    return CONTROL_RE.sub("", strip_ansi(text))
 
 
 def as_float(value: Any) -> float | None:

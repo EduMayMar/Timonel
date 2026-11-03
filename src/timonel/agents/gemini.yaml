@@ -13,6 +13,7 @@ install:
 login: {command: ["gemini"], flow: browser}
 agent:
   enabled: false
+  env_pass: [GEMINI_API_KEY]
   command: gemini
   billing: subscription
   parser: json

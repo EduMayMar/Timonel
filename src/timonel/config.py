@@ -25,7 +25,7 @@ PLACEHOLDERS = frozenset({"prompt", "prompt_file", "model", "effort", "timeout_s
 PLACEHOLDER_RE = re.compile(r"\{([a-z_]+)\}")
 DANGEROUS_MARKERS = (
     "--dangerously",
-    "--yolo",
+    "yolo",
     "danger-full-access",
     "bypasspermissions",
     "approval_policy=never",
@@ -99,6 +99,7 @@ class Agent:
     env: dict[str, str] = field(default_factory=dict)
     env_from: dict[str, str] = field(default_factory=dict)
     env_remove: tuple[str, ...] = ()
+    env_pass: tuple[str, ...] = ()
     models_command: tuple[str, ...] = ()
     known_models: tuple[str, ...] = ()
     model_aliases: dict[str, str] = field(default_factory=dict)
@@ -373,6 +374,7 @@ class ProjectState:
     path: Path | None = None
     trusted: bool = False
     digest: str = ""
+    text: str = field(default="", repr=False)
 
 
 @dataclass(frozen=True)
@@ -673,10 +675,6 @@ def overrides_layer(assignments: list[str]) -> dict[str, Any]:
     return layer
 
 
-def file_digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def read_trust_store() -> dict[str, str]:
     path = trust_store_path()
     if not path.is_file():
@@ -705,14 +703,15 @@ def project_state(repo: Path | None) -> ProjectState:
     path = project_file(repo)
     if path is None:
         return ProjectState()
-    digest = file_digest(path)
+    content = path.read_bytes()
+    digest = hashlib.sha256(content).hexdigest()
     trusted = read_trust_store().get(str(path.resolve())) == digest
-    return ProjectState(path=path, trusted=trusted, digest=digest)
+    return ProjectState(path=path, trusted=trusted, digest=digest, text=content.decode("utf-8"))
 
 
-def trust_project(path: Path) -> str:
+def trust_project(path: Path, content: bytes | None = None) -> str:
     store = read_trust_store()
-    digest = file_digest(path)
+    digest = hashlib.sha256(path.read_bytes() if content is None else content).hexdigest()
     store[str(path.resolve())] = digest
     write_trust_store(store)
     return digest
@@ -942,9 +941,10 @@ def load_config(
     project = project_state(repo)
     project_data: dict[str, Any] = {}
     if project.path is not None and project.trusted:
-        project_raw, project_marks = parse_yaml(
-            project.path.read_text(encoding="utf-8"), str(project.path)
-        )
+        project_raw, project_marks = parse_yaml(project.text, str(project.path))
+        forbidden = project_problems(project_raw, str(project.path))
+        if forbidden:
+            raise ConfigError(forbidden)
         project_data = migrate(project_raw, project_marks)
         marks = {**marks, **project_marks}
     env = env_layer(dict(os.environ if environ is None else environ))
@@ -973,6 +973,10 @@ def validate_text(text: str, filename: str = "routes.yaml") -> Config:
     )
 
 
+SENSITIVE_PROJECT_AREAS = ("agents", "verification", "notifications", "paths", "privacy")
+PROJECT_FORBIDDEN_AGENT_KEYS = ("meta", "provider", "env_from", "env_pass")
+
+
 def project_commands(data: dict[str, Any]) -> list[str]:
     found: list[str] = []
     for command in data.get("verification", {}).get("commands", []) or []:
@@ -980,20 +984,24 @@ def project_commands(data: dict[str, Any]) -> list[str]:
     for hook in ("pre_run", "post_run", "on_failure"):
         for command in data.get("hooks", {}).get(hook, []) or []:
             found.append(f"hook {hook}: " + " ".join(map(str, command)))
-    for name, agent in (data.get("agents") or {}).items():
-        if isinstance(agent, dict) and any(
-            key in agent
-            for key in (
-                "command",
-                "base_args",
-                "write_args",
-                "env",
-                "dangerous_args",
-                "allow_dangerous",
-            )
-        ):
-            found.append(f"agent {name}: changes how the agent is launched")
     for index, rule in enumerate(data.get("routing", {}).get("rules", []) or []):
         for command in (rule.get("then", {}) or {}).get("verify", []) or []:
             found.append(f"rule {index} verify: " + " ".join(map(str, command)))
+    for area in SENSITIVE_PROJECT_AREAS:
+        for path in flatten(data.get(area) or {}):
+            key = ".".join((area, *path))
+            if not key.startswith("verification.commands"):
+                found.append(f"sets {key}")
+    if (data.get("execution") or {}).get("agent_env_deny") is not None:
+        found.append("sets execution.agent_env_deny")
     return found
+
+
+def project_problems(data: dict[str, Any], filename: str) -> list[str]:
+    return [
+        f"{filename}: agents.{name}.{key} can only be set in your user configuration"
+        for name, agent in (data.get("agents") or {}).items()
+        if isinstance(agent, dict)
+        for key in PROJECT_FORBIDDEN_AGENT_KEYS
+        if key in agent
+    ]

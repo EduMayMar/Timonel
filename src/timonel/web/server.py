@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 import webbrowser
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -369,12 +369,21 @@ class App:
             raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "invalid configuration", problems)
         target = self.config.source or user_config_path()
         target.parent.mkdir(parents=True, exist_ok=True)
+        candidate = target.with_name(f".{target.name}.{secrets.token_hex(4)}.tmp")
+        candidate.write_text(text, encoding="utf-8")
+        try:
+            config = load_config(candidate, repo=self.repo, environ=self.engine.environ)
+        except ConfigError as error:
+            candidate.unlink()
+            raise ApiError(
+                HTTPStatus.UNPROCESSABLE_ENTITY, "invalid configuration", error.problems
+            ) from error
         if target.is_file():
             target.with_suffix(target.suffix + ".bak").write_text(
                 target.read_text(encoding="utf-8"), encoding="utf-8"
             )
-        target.write_text(text, encoding="utf-8")
-        config = load_config(target, repo=self.repo, environ=self.engine.environ)
+        candidate.replace(target)
+        config = replace(config, source=target)
         self.config = config
         self.engine.config = config
         return {"saved": str(target), **self.config_view()}
@@ -467,16 +476,22 @@ def captured_runner(lines: list[str]) -> wizard.Runner:
             launch = resolve_launch(argv)
         except LaunchError:
             return 127
-        result = subprocess.run(
-            launch,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=1800,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                launch,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=1800,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            partial = (error.stdout or b"") + (error.stderr or b"")
+            text = partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial
+            lines.extend([*text.splitlines()[-40:], "timed out after 1800 s"])
+            return 124
         lines.extend((result.stdout + result.stderr).splitlines()[-40:])
         return result.returncode
 
@@ -732,6 +747,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.reject(HTTPStatus.NOT_FOUND, "not found")
         except ApiError as error:
             self.send_json(error.status, {"error": str(error), "details": error.details})
+        except ConfigError as error:
+            self.send_json(
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                {"error": "invalid configuration", "details": error.problems},
+            )
         except (RunError, RoutingError, GitError, ValueError) as error:
             self.send_json(HTTPStatus.CONFLICT, {"error": app.engine.redact(str(error))})
 

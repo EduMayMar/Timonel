@@ -416,3 +416,71 @@ def test_setup_endpoint_and_install_confirmation(app: App, monkeypatch: pytest.M
     )
     assert terminal["status"] == "terminal"  # type: ignore[index]
     assert len(ran) == 1
+
+
+def test_settings_save_checks_every_layer_before_writing(
+    app: App, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = Client(app)
+    target = home / "routes.yaml"
+    target.write_text("mode: simple\n", encoding="utf-8")
+    app.engine.environ["TIMONEL_REVIEW__MAX_ROUNDS"] = "-5"
+    status, error = client.json("PUT", "/api/config", {"values": {"mode": "expert"}})
+    assert status == 422
+    assert any("review.max_rounds" in item for item in error["details"])  # type: ignore[index]
+    assert target.read_text(encoding="utf-8") == "mode: simple\n"
+    assert not list(home.glob(".routes.yaml.*.tmp"))
+
+
+def test_install_endpoint_guards(app: App, monkeypatch: pytest.MonkeyPatch, fakes: Fakes) -> None:
+    import timonel.web.server as server
+    from timonel import wizard
+
+    client = Client(app)
+    ran: list[list[str]] = []
+    secret = fakes.env["DEEPSEEK_API_KEY"]
+
+    def fake_runner(lines: list[str]) -> object:
+        def run(argv: list[str]) -> int:
+            ran.append(argv)
+            lines.append(f"token {secret}")
+            return 0
+
+        return run
+
+    monkeypatch.setattr(server, "captured_runner", fake_runner)
+    monkeypatch.setattr(wizard, "reachable", lambda host, environ: True)
+    monkeypatch.setattr(wizard, "detect_os", lambda system=None: "linux")
+    monkeypatch.setattr(wizard, "detect_managers", lambda environ: ["apt"])
+    status, elevated = client.json("POST", "/api/setup/install", {"key": "git", "confirm": True})
+    assert elevated["status"] == "terminal" and elevated["from_ui"] is False  # type: ignore[index]
+    assert elevated["command"].startswith("sudo ")  # type: ignore[index]
+    monkeypatch.setattr(wizard, "detect_managers", lambda environ: ["npm"])
+    status, _, _ = client.request("POST", "/api/setup/install", {"key": "gemini"}, csrf=False)
+    assert status == 403
+    app.install_lock.acquire()
+    try:
+        assert (
+            client.json("POST", "/api/setup/install", {"key": "gemini", "confirm": True})[0] == 409
+        )
+    finally:
+        app.install_lock.release()
+    assert ran == []
+    status, result = client.json("POST", "/api/setup/install", {"key": "gemini", "confirm": True})
+    assert len(ran) == 1
+    assert secret not in json.dumps(result)
+
+
+def test_install_runner_survives_a_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    import timonel.web.server as server
+
+    def hang(*args: object, **kwargs: object) -> object:
+        raise subprocess.TimeoutExpired(["npm"], 1800, output=b"partial", stderr=b"")
+
+    monkeypatch.setattr(server.subprocess, "run", hang)
+    monkeypatch.setattr(server, "resolve_launch", lambda argv: argv)
+    lines: list[str] = []
+    assert server.captured_runner(lines)(["npm", "install", "-g", "x"]) == 124
+    assert lines[-1] == "timed out after 1800 s" and "partial" in lines

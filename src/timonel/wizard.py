@@ -23,6 +23,7 @@ from typing import Any, Literal
 import yaml
 
 from timonel import keys
+from timonel.adapters import strip_controls
 from timonel.config import Config
 from timonel.doctor import check_auth, safe_env
 from timonel.i18n import t
@@ -73,7 +74,7 @@ class InstallSpec:
 
     @property
     def elevated(self) -> bool:
-        return bool(self.argv) and self.argv[0] in ("sudo", "doas", "runas")
+        return bool(self.argv) and self.argv[0] != MANAGER_COMMAND.get(self.manager, self.manager)
 
 
 @dataclass(frozen=True)
@@ -323,7 +324,7 @@ def refresh_windows_path(environ: dict[str, str]) -> bool:
         paths.extend(os.path.expandvars(str(value)).split(os.pathsep))
     merged = [
         entry
-        for entry in dict.fromkeys([*paths, *environ.get("PATH", "").split(os.pathsep)])
+        for entry in dict.fromkeys([*environ.get("PATH", "").split(os.pathsep), *paths])
         if entry
     ]
     environ["PATH"] = os.pathsep.join(merged)
@@ -432,7 +433,7 @@ def install_component(session: Session, plan: Plan, component: Component) -> str
     if spec.manager == "script":
         return run_script(session, component, spec)
     if spec.elevated:
-        session.say(t("wizard.elevation"))
+        session.say(t("wizard.elevation", manager=spec.manager))
         session.say(f"  {' '.join(spec.argv)}")
         if not session.assume_yes:
             session.ask("")
@@ -482,20 +483,25 @@ def run_script(session: Session, component: Component, spec: InstallSpec) -> str
     script.write_bytes(body)
     session.say(t("wizard.script_intro"))
     session.say(f"  {url} -> {script}")
-    for line in body.decode("utf-8", errors="replace").splitlines()[:SCRIPT_PREVIEW_LINES]:
+    lines = strip_controls(body.decode("utf-8", errors="replace")).splitlines()
+    for line in lines[:SCRIPT_PREVIEW_LINES]:
         session.say(f"    {line}")
+    if len(lines) > SCRIPT_PREVIEW_LINES:
+        session.say(t("wizard.script_more", count=len(lines) - SCRIPT_PREVIEW_LINES, path=script))
     session.say(t("wizard.script_sha", sha=digest))
-    if session.assume_yes or not yes(session.ask(t("wizard.script_confirm") + " [y/N] ")):
-        audit(session, "script-declined", component.key, [url], None)
-        return "skipped"
-    argv = (
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
-        if script.suffix == ".ps1"
-        else ["sh", str(script)]
-    )
-    code = session.runner(argv)
-    audit(session, "install-script", component.key, [url, f"sha256={digest}"], code)
-    shutil.rmtree(folder, ignore_errors=True)
+    try:
+        if session.assume_yes or not yes(session.ask(t("wizard.script_confirm") + " [y/N] ")):
+            audit(session, "script-declined", component.key, [url], None)
+            return "skipped"
+        argv = (
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
+            if script.suffix == ".ps1"
+            else ["sh", str(script)]
+        )
+        code = session.runner(argv)
+        audit(session, "install-script", component.key, [url, f"sha256={digest}"], code)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
     return "installed" if code == 0 and installed(component, session.environ) else "failed"
 
 
@@ -583,10 +589,7 @@ def run_wizard(
             continue
         else:
             session.results[component.key] = install_component(session, plan, component)
-            if (
-                session.results[component.key] in ("installed", "skipped", "manual")
-                and not session.dry_run
-            ):
+            if session.results[component.key] == "installed" and not session.dry_run:
                 done.add(step)
                 write_state(session.state_path, {"done": sorted(done)})
         if (component.kind != "tool" or component.login) and installed(component, session.environ):

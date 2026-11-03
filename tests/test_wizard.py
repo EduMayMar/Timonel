@@ -154,7 +154,7 @@ def test_never_elevates_on_linux(
     results = wizard.run_wizard(config, session, [], system="Linux")
     assert not Path(str(system["log"])).exists()
     said = "\n".join(session.said)  # type: ignore[attr-defined]
-    assert "never elevates" in said
+    assert "will not run it by itself" in said
     assert "sudo apt-get install -y git" in said
     assert results["git"] == "not_found"
 
@@ -164,9 +164,14 @@ def test_resumes_from_state_file(
 ) -> None:
     config = config_with_reachable_network(monkeypatch)
     fake_program(system["bin"], "brew", "")  # type: ignore[arg-type]
-    first = session_for(system, ["s"])
+    skipped = session_for(system, ["s"])
+    wizard.run_wizard(config, skipped, [], system="Darwin")
+    assert not skipped.state_path.exists()
+    first = session_for(system, ["i"])
     wizard.run_wizard(config, first, [], system="Darwin")
     assert json.loads(first.state_path.read_text())["done"] == ["install:git"]
+    for leftover in Path(str(system["bin"])).glob("git*"):
+        leftover.unlink()
     second = session_for(system, [])
     results = wizard.run_wizard(config, second, [], system="Darwin")
     assert results["git"] == "done_before"
@@ -196,6 +201,8 @@ def test_install_scripts_are_shown_before_running(
     system: dict[str, object], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = config_with_reachable_network(monkeypatch)
+    monkeypatch.setattr(wizard, "detect_os", lambda system=None: "linux")
+    monkeypatch.setattr(wizard.tempfile, "tempdir", str(system["bin"].parent))  # type: ignore[union-attr]
     cursor = next(item for item in wizard.agent_components(config) if item.key == "cursor")
     declined = session_for(system, ["i", "n"])
     assert wizard.install_component(declined, wizard.Plan("linux", [], []), cursor) == "skipped"
@@ -204,6 +211,9 @@ def test_install_scripts_are_shown_before_running(
     assert "echo installing" in said
     assert "SHA-256 of the script" in said
     assert not Path(str(system["log"])).exists()
+    assert not list(system["bin"].parent.glob("timonel-installer-*"))  # type: ignore[union-attr]
+    audit = [json.loads(line) for line in declined.audit_path.read_text().splitlines()]
+    assert audit[-1]["action"] == "script-declined"
     accepted = session_for(system, ["i", "y"])
     wizard.install_component(accepted, wizard.Plan("linux", [], []), cursor)
     assert Path(str(system["log"])).read_text().startswith("sh ")
@@ -268,3 +278,90 @@ def test_pick_install_prefers_official_managers() -> None:
     assert wizard.pick_install(gh, "linux", []).manual.startswith("https://github.com/cli/cli")  # type: ignore[union-attr]
     aider = next(item for item in wizard.agent_components(config) if item.key == "aider")
     assert wizard.pick_install(aider, "windows", ["uv", "pipx"]).manager == "pipx"  # type: ignore[union-attr]
+
+
+def test_yes_without_allow_runs_nothing(
+    system: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = config_with_reachable_network(monkeypatch)
+    fake_program(system["bin"], "brew", "")  # type: ignore[arg-type]
+    session = session_for(system, [], assume_yes=True)
+    results = wizard.run_wizard(config, session, ["codex", "claude"], system="Darwin")
+    assert not Path(str(system["log"])).exists()
+    assert set(results.values()) <= {"skipped", "ok"}
+
+
+def test_script_install_never_runs_in_yes_mode(
+    system: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = config_with_reachable_network(monkeypatch)
+    monkeypatch.setattr(wizard, "detect_os", lambda system=None: "linux")
+    cursor = next(item for item in wizard.agent_components(config) if item.key == "cursor")
+    session = session_for(system, [], assume_yes=True, allow=frozenset({"cursor"}))
+    assert wizard.install_component(session, wizard.Plan("linux", [], []), cursor) == "skipped"
+    assert not Path(str(system["log"])).exists()
+    audit = [json.loads(line) for line in session.audit_path.read_text().splitlines()]
+    assert audit[-1]["action"] == "script-declined"
+
+
+def test_store_key_never_prompts_in_yes_or_dry_run(
+    system: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def forbidden(prompt: str) -> str:
+        raise AssertionError("asked for a secret")
+
+    def no_store(name: str, value: str) -> None:
+        raise AssertionError("stored a key")
+
+    monkeypatch.setattr(keys, "store", no_store)
+    deepseek = next(
+        item for item in wizard.agent_components(make_config()) if item.key == "deepseek"
+    )
+    for options in ({"assume_yes": True}, {"dry_run": True}):
+        session = session_for(system, ["k"], **options)
+        assert wizard.store_key(session, deepseek, secret_input=forbidden) == "skipped"
+
+
+def test_keyring_errors_never_echo_the_secret(
+    system: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def leaky(name: str, value: str) -> None:
+        raise keys.KeyringUnavailable(f"backend rejected {value}")
+
+    monkeypatch.setattr(keys, "store", leaky)
+    deepseek = next(
+        item for item in wizard.agent_components(make_config()) if item.key == "deepseek"
+    )
+    session = session_for(system, ["k"])
+    outcome = wizard.store_key(session, deepseek, secret_input=lambda prompt: "sk-leak-me-123")
+    assert outcome == "no_keyring"
+    assert "sk-leak-me-123" not in "\n".join(session.said)  # type: ignore[attr-defined]
+    if session.audit_path.exists():
+        assert "sk-leak-me-123" not in session.audit_path.read_text()
+
+
+def test_long_install_scripts_say_how_much_was_not_shown(
+    system: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = config_with_reachable_network(monkeypatch)
+    monkeypatch.setattr(wizard, "detect_os", lambda system=None: "linux")
+    cursor = next(item for item in wizard.agent_components(config) if item.key == "cursor")
+    session = session_for(system, ["i", "n"])
+    session.fetch = lambda url: "\n".join(f"echo {n}\x1b[2K" for n in range(100)).encode()
+    wizard.install_component(session, wizard.Plan("linux", [], []), cursor)
+    said = "\n".join(session.said)  # type: ignore[attr-defined]
+    assert "60 more lines not shown" in said
+    assert "\x1b" not in said
+
+
+def test_single_letter_s_means_skip_never_yes() -> None:
+    from timonel import i18n
+
+    previous = i18n.current()
+    try:
+        for language in i18n.LANGUAGES:
+            i18n.set_language(language)
+            assert not wizard.yes("s")
+            assert wizard.yes("yes")
+    finally:
+        i18n.set_language(previous)

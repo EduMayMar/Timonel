@@ -12,6 +12,7 @@ install:
   drift: {npm: "@anthropic-ai/claude-code", help: [["--help"]]}
 login: {command: ["claude", "auth", "login"], flow: browser}
 agent:
+  env_pass: [ANTHROPIC_API_KEY]
   command: claude
   billing: subscription
   parser: json

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from timonel import keys
+from timonel import keys, wizard
 from timonel.cli import main
 from timonel.config import user_agents_dir, user_config_path
 
@@ -174,6 +174,7 @@ def test_trust_flow(env: Path, repo: Path, capsys: pytest.CaptureFixture[str]) -
     assert "Ignoring" in out
     code, out = run(capsys, "trust", "--repo", str(repo))
     assert code == 1 and "verify: python -c pass" in out
+    assert "Full content of" in out and "commands: [[python, -c, 'pass']]" in out
     assert run(capsys, "trust", "--repo", str(repo), "--yes")[0] == 0
     code, out = run(capsys, "plan", "x", "--repo", str(repo))
     assert "Ignoring" not in out
@@ -271,6 +272,45 @@ def test_start_dry_run_from_cli(env: Path, capsys: pytest.CaptureFixture[str]) -
     assert code == 2 and "Unknown agent" in out
 
 
-def test_doctor_fix_with_nothing_to_fix(env: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    code, out = run(capsys, "doctor", "--fix", "--yes")
-    assert "Nothing to fix" in out or code in (0, 1)
+def test_doctor_fix_yes_without_allow_runs_nothing(
+    env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ran: list[list[str]] = []
+    monkeypatch.setattr(wizard, "run_inherited", lambda argv: ran.append(argv) or 0)
+    monkeypatch.setattr(wizard, "reachable", lambda host, environ: True)
+    code, _ = run(capsys, "doctor", "--fix", "--yes")
+    assert code in (0, 1)
+    assert ran == []
+
+
+def test_update_check_is_off_by_default_and_makes_no_request(
+    env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import urllib.request
+
+    def refuse(*args: object, **kwargs: object) -> object:
+        raise AssertionError("network request")
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    run(capsys, "doctor")
+
+
+def test_start_adds_agents_to_default_tiers_not_merged_ones(
+    env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+
+    from timonel.config import user_config_path
+
+    monkeypatch.setattr(
+        wizard, "run_wizard", lambda config, session, wanted, system=None: {"gemini": "ok"}
+    )
+    code, _ = run(
+        capsys, "--set", "tiers={1: [{agent: claude}]}", "start", "--yes", "--agents", "gemini"
+    )
+    assert code == 0
+    written = yaml.safe_load(user_config_path().read_text(encoding="utf-8"))
+    assert written["agents"]["gemini"]["enabled"] is True
+    assert len(written["tiers"]) == 4
+    assert {"agent": "gemini", "model": "", "effort": ""} in written["tiers"]["1"]
+    assert written["tiers"]["1"][0]["agent"] == "copilot"

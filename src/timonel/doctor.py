@@ -15,6 +15,7 @@ from timonel.adapters import (
     build_env,
     build_invocation,
     parse_output,
+    passed_through,
     secret_sources,
     strip_ansi,
 )
@@ -71,7 +72,7 @@ def safe_env(agent: Agent, config: Config, environ: Mapping[str, str]) -> dict[s
     try:
         return build_env(agent, config.agents, environ)
     except SecretMissingError:
-        blocked = secret_sources(config.agents)
+        blocked = secret_sources(config.agents) - passed_through(agent)
         return {key: value for key, value in environ.items() if key not in blocked}
 
 

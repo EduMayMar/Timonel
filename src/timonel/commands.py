@@ -19,6 +19,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from timonel import demo, gitops, keys, schema, wizard
+from timonel.adapters import strip_controls
 from timonel.config import (
     Config,
     ConfigError,
@@ -27,6 +28,7 @@ from timonel.config import (
     parse_yaml,
     project_commands,
     project_file,
+    project_problems,
     revoke_project,
     set_path,
     trust_project,
@@ -166,7 +168,8 @@ def cmd_start(args: argparse.Namespace, config: Config) -> int:
         path = user_config_path()
         data = read_user(path)
         merged_tiers = {
-            str(tier): [rung.__dict__ for rung in rungs] for tier, rungs in config.tiers.items()
+            str(tier): [dict(rung) for rung in rungs]
+            for tier, rungs in (data.get("tiers") or config.layers["default"]["tiers"]).items()
         }
         for name in to_enable:
             set_path(data, ["agents", name, "enabled"], True)
@@ -363,16 +366,23 @@ def cmd_trust(args: argparse.Namespace, config: Config) -> int:
         revoke_project(found)
         console.print(t("trust.revoked", path=found))
         return 0
-    data, _ = parse_yaml(found.read_text(encoding="utf-8"), str(found))
-    validate_text(found.read_text(encoding="utf-8"), str(found))
+    content = found.read_bytes()
+    text = content.decode("utf-8")
+    data, _ = parse_yaml(text, str(found))
+    validate_text(text, str(found))
+    forbidden = project_problems(data, str(found))
+    if forbidden:
+        raise ConfigError(forbidden)
     commands = project_commands(data)
+    console.print(t("trust.full", path=found))
+    console.print(strip_controls(text), highlight=False, markup=False)
     console.print(t("trust.review", path=found))
     for line in commands or [t("trust.no_commands")]:
         console.print(f"  - {escape(line)}")
     if not confirm_yes(t("trust.question"), args.yes):
         console.print(t("common.aborted"))
         return 1
-    trust_project(found)
+    trust_project(found, content)
     console.print(t("trust.done", path=found))
     return 0
 

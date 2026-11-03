@@ -185,12 +185,19 @@ def test_classifier_garbage_falls_back_to_heuristic(fakes: Fakes, repo: Path) ->
     assert record["classification"]["kind"] == "explain"
 
 
-def test_cross_review_rejection_triggers_one_fix_round(fakes: Fakes, repo: Path) -> None:
+def test_cross_review_rejection_triggers_one_fix_round(
+    fakes: Fakes, repo: Path, tmp_path: Path
+) -> None:
     review = json.dumps({"approve": False, "issues": ["missing newline"]})
     classification = json.dumps(
         {"complexity": 3, "kind": "edit", "risk": "low", "needs_write": True, "estimated_files": 1}
     )
-    engine = with_env(fakes, FAKE_CLASSIFICATION=classification, FAKE_REVIEW=review)
+    engine = with_env(
+        fakes,
+        FAKE_CLASSIFICATION=classification,
+        FAKE_REVIEW=review,
+        FAKE_REVIEW_ONCE=str(tmp_path / "reviewed-once"),
+    )
     record = engine.run(
         RunOptions(task="[[edit claude:result.txt=good]] go", repo=repo, verify=CHECK_GOOD)
     )
@@ -202,6 +209,21 @@ def test_cross_review_rejection_triggers_one_fix_round(fakes: Fakes, repo: Path)
     assert ("fix", "claude") in roles
     fix_prompt = [c["prompt"] for c in fakes.calls() if "reviewer rejected" in str(c["prompt"])]
     assert fix_prompt and "missing newline" in fix_prompt[0]
+    assert len(reviewers) == 2
+
+
+def test_fixed_change_is_reviewed_again_and_can_still_fail(fakes: Fakes, repo: Path) -> None:
+    review = json.dumps({"approve": False, "issues": ["still wrong"]})
+    classification = json.dumps(
+        {"complexity": 3, "kind": "edit", "risk": "low", "needs_write": True, "estimated_files": 1}
+    )
+    engine = with_env(fakes, FAKE_CLASSIFICATION=classification, FAKE_REVIEW=review)
+    record = engine.run(
+        RunOptions(task="[[edit claude:result.txt=good]] go", repo=repo, verify=CHECK_GOOD)
+    )
+    assert record["status"] == "failed"
+    roles = [role for role, _, _ in outcomes(engine, record["id"])]
+    assert roles[:5] == ["classify", "execute", "review", "fix", "review"]
 
 
 def test_cross_review_approval_skips_fix(fakes: Fakes, repo: Path) -> None:
