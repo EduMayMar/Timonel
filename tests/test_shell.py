@@ -38,7 +38,10 @@ def env(fakes: Fakes, monkeypatch: pytest.MonkeyPatch) -> Fakes:
 def make_shell(
     cwd: Path, answers: list[str], extra: str = "", tui: str = ""
 ) -> tuple[shell.Shell, StringIO]:
-    config = make_config(f"tui: {{check_on_start: false{', ' + tui if tui else ''}}}\n" + extra)
+    config = make_config(
+        f"tui: {{check_on_start: false, classify_with_model: false{', ' + tui if tui else ''}}}\n"
+        + extra
+    )
     buffer = StringIO()
     console = Console(file=buffer, width=120, no_color=True, highlight=False)
     pending = list(answers)
@@ -400,7 +403,8 @@ def terminals() -> Iterator[list[Any]]:
 @pytest.fixture
 def terminal_env(fakes: Fakes, home: Path, repo: Path) -> dict[str, str]:
     (home / "routes.yaml").write_text(
-        TEST_ROUTES + "tui: {check_timeout_s: 10, history: true}\n", encoding="utf-8"
+        TEST_ROUTES + "tui: {check_timeout_s: 10, history: true, classify_with_model: false}\n",
+        encoding="utf-8",
     )
     environment = {
         **fakes.env,
@@ -514,7 +518,9 @@ def test_terminal_keeps_earlier_text_when_clear_screen_is_off(
     if WINDOWS:
         pytest.skip("ConPTY escape sequences are not verified")
     (home / "routes.yaml").write_text(
-        TEST_ROUTES + "tui: {check_timeout_s: 10, clear_screen: false}\n", encoding="utf-8"
+        TEST_ROUTES
+        + "tui: {check_timeout_s: 10, clear_screen: false, classify_with_model: false}\n",
+        encoding="utf-8",
     )
     terminal = spawn([sys.executable, "-m", "timonel"], repo, terminal_env)
     terminals.append(terminal)

@@ -49,6 +49,7 @@ classifier:
       explain: [explain, explica, what does, qué hace, que hace, why does, por qué, how does, cómo funciona, como funciona, describe, summarize, resume]
     broad_words: [entire, whole codebase, all files, every, across, todo el, todos los, toda la, en todo]
     trivial_words: [typo, errata, comment, comentario, readme, rename variable, one line, una línea]
+    chat_words: [hola, hello, hi, hey, buenas, buenos, dias, días, tardes, noches, gracias, thanks, thank, you, ok, vale, oi, olá, obrigado, obrigada, bom, dia, tarde, noite, que, tal]
     risky_words: [security, seguridad, auth, password, contraseña, payment, pago, billing, migration, migración, database, base de datos, delete, borra, elimina, production, producción, "prod ", crypto, secret]
 
 planner:

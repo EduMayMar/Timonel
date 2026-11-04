@@ -67,6 +67,7 @@ Generated from `src/timonel/schema/config.schema.yaml` by `scripts/gen_docs.py`;
 | `classifier.heuristics.keywords.explain` | list of string | — | Words that mark a 'explain' task. *(advanced)* |
 | `classifier.heuristics.broad_words` | list of string | — | Words that mark a broad scope. *(advanced)* |
 | `classifier.heuristics.trivial_words` | list of string | — | Words that mark a trivial change. *(advanced)* |
+| `classifier.heuristics.chat_words` | list of string | — | Words of a plain greeting or thanks; a message made only of these is answered read-only instead of editing files. *(advanced)* |
 | `classifier.heuristics.risky_words` | list of string | — | Words that mark a high-risk task. *(advanced)* |
 
 ## Cross review
@@ -93,6 +94,7 @@ Generated from `src/timonel/schema/config.schema.yaml` by `scripts/gen_docs.py`;
 | `escalation.context_chars` | integer | `4000` | Characters of the previous error passed to the next attempt. |
 | `escalation.context_attempts` | integer | `2` | How many previous failures are included as context. *(advanced)* |
 | `escalation.cooldown_minutes` | integer | `30` | Rest time for an agent after a usage limit. |
+| `escalation.answer_without_changes_max_complexity` | integer | `2` | Up to this complexity, an agent that answers without changing any file counts as done instead of escalating (0 always escalates). |
 | `escalation.reset_between_attempts` | boolean | `true` | Reset the worktree to the base commit before each new attempt. *(advanced)* |
 
 ## Conversation context
@@ -193,6 +195,7 @@ Generated from `src/timonel/schema/config.schema.yaml` by `scripts/gen_docs.py`;
 | `tui.history` | boolean | `true` | Remember what you type between sessions (lines that look like secrets are never saved). |
 | `tui.history_size` | integer | `1000` | Maximum number of remembered lines. *(advanced)* |
 | `tui.confirm_run` | boolean | `true` | Ask for confirmation after showing the plan of a task. |
+| `tui.classify_with_model` | boolean | `true` | Classify each task with the cheap classifier model before planning, instead of keyword rules only. |
 | `tui.clear_screen` | boolean | `true` | Clear the terminal when the home screen opens, like a fresh application. |
 | `tui.keys.profile` | string | `s-tab` | Cycle the profile (cheap, balanced, max). *(advanced)* |
 | `tui.keys.mode` | string | `f2` | Switch between simple and expert mode for this session. *(advanced)* |

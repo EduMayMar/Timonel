@@ -123,7 +123,11 @@ def detect_kind(lowered: str, settings: Heuristics) -> Kind:
         positions = [lowered.find(word.lower()) for word in words if word.lower() in lowered]
         if positions and (best is None or min(positions) < best[0]):
             best = (min(positions), kind)
-    return best[1] if best else "edit"
+    if best:
+        return best[1]
+    words = re.findall(r"\w+", lowered)
+    chat = {word.lower() for word in settings.chat_words}
+    return "explain" if words and chat and all(word in chat for word in words) else "edit"
 
 
 def mentioned_files(task: str) -> list[str]:

@@ -67,6 +67,7 @@ Gerado a partir de `src/timonel/schema/config.schema.yaml` por `scripts/gen_docs
 | `classifier.heuristics.keywords.explain` | list of string | — | Palavras que marcam uma tarefa 'explain'. *(avançada)* |
 | `classifier.heuristics.broad_words` | list of string | — | Palavras que marcam um escopo amplo. *(avançada)* |
 | `classifier.heuristics.trivial_words` | list of string | — | Palavras que marcam uma mudança trivial. *(avançada)* |
+| `classifier.heuristics.chat_words` | list of string | — | Palavras de uma saudação ou agradecimento; uma mensagem feita só delas é respondida em somente leitura, sem editar arquivos. *(avançada)* |
 | `classifier.heuristics.risky_words` | list of string | — | Palavras que marcam uma tarefa de alto risco. *(avançada)* |
 
 ## Revisão cruzada
@@ -93,6 +94,7 @@ Gerado a partir de `src/timonel/schema/config.schema.yaml` por `scripts/gen_docs
 | `escalation.context_chars` | integer | `4000` | Caracteres do erro anterior passados para a próxima tentativa. |
 | `escalation.context_attempts` | integer | `2` | Quantas falhas anteriores são incluídas como contexto. *(avançada)* |
 | `escalation.cooldown_minutes` | integer | `30` | Descanso de um agente após um limite de uso. |
+| `escalation.answer_without_changes_max_complexity` | integer | `2` | Até esta complexidade, um agente que responde sem alterar arquivos conta como concluído em vez de escalar (0 sempre escala). |
 | `escalation.reset_between_attempts` | boolean | `true` | Restaurar o worktree ao commit base antes de cada tentativa. *(avançada)* |
 
 ## Contexto da conversa
@@ -193,6 +195,7 @@ Gerado a partir de `src/timonel/schema/config.schema.yaml` por `scripts/gen_docs
 | `tui.history` | boolean | `true` | Lembrar o que você digita entre sessões (linhas que parecem segredos nunca são salvas). |
 | `tui.history_size` | integer | `1000` | Número máximo de linhas lembradas. *(avançada)* |
 | `tui.confirm_run` | boolean | `true` | Pedir confirmação depois de mostrar o plano de uma tarefa. |
+| `tui.classify_with_model` | boolean | `true` | Classificar cada tarefa com o modelo classificador barato antes de planejar, em vez de só regras de palavras-chave. |
 | `tui.clear_screen` | boolean | `true` | Limpar o terminal ao abrir a tela inicial, como um aplicativo novo. |
 | `tui.keys.profile` | string | `s-tab` | Alternar o perfil (cheap, balanced, max). *(avançada)* |
 | `tui.keys.mode` | string | `f2` | Alternar entre modo simples e especialista nesta sessão. *(avançada)* |

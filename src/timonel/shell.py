@@ -281,7 +281,10 @@ class Shell:
 
         engine = cli.make_engine(self.config, live=True)
         try:
-            plan = engine.plan(text, profile=self.profile, cwd=self.cwd)
+            if self.config.tui.classify_with_model:
+                plan = engine.preview(text, profile=self.profile, cwd=self.cwd)
+            else:
+                plan = engine.plan(text, profile=self.profile, cwd=self.cwd)
         except Exception as error:
             cli.report_error(error)
             return
