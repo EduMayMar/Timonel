@@ -287,6 +287,8 @@
   "ui.setup.login": "Cómo iniciar sesión",
   "ui.setup.login_hint": "Ejecuta esto en una terminal. La herramienta oficial abre su propio inicio de sesión; Timonel solo comprueba el resultado después.",
   "ui.setup.login_needed": "falta iniciar sesión",
+  "ui.setup.login_unknown": "sesión sin comprobar",
+  "ui.setup.login_unknown_hint": "Este agente no ofrece un comando para saber si ya iniciaste sesión. Si ya lo hiciste, ejecuta «timonel doctor --smoke» para comprobarlo con un mensaje real.",
   "ui.setup.manual": "No hay paquete para tu sistema; sigue las instrucciones oficiales:",
   "ui.setup.no_project": "No hay .timonel.yaml en este repositorio.",
   "ui.setup.privacy": "Timonel nunca pide, ve ni guarda las contraseñas ni los tokens de tus cuentas. El inicio de sesión ocurre en la herramienta oficial, en tu terminal.",
