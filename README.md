@@ -74,6 +74,19 @@ running it. Details: [docs/terminal.md](docs/terminal.md).
 
 ![Timonel home screen in a terminal, with agent states and the input box](docs/screenshots/terminal-home.png)
 
+### Working across several tasks
+
+The home screen remembers what you did in the session: the next task is told about the earlier ones
+(`context.scope: session`, the default). Type `/new` to start fresh. Outside the home screen use
+`timonel run --continue "..."` to include earlier tasks of the repository, or `--no-context` to
+ignore them. `tui.clear_screen: false` keeps your terminal text when the home screen opens.
+
+To keep API keys in the system keyring, install with the extra:
+
+```bash
+pipx install ".[keyring]"
+```
+
 ## How it works
 
 ```mermaid

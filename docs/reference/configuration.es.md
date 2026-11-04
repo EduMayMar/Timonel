@@ -95,6 +95,18 @@ Generado desde `src/timonel/schema/config.schema.yaml` con `scripts/gen_docs.py`
 | `escalation.cooldown_minutes` | integer | `30` | Descanso de un agente tras un límite de uso. |
 | `escalation.reset_between_attempts` | boolean | `true` | Restablecer el worktree al commit base antes de cada intento. *(avanzada)* |
 
+## Contexto de conversación
+
+| Clave | Tipo | Por defecto | Significado |
+|---|---|---|---|
+| `context.scope` | `off` \| `session` \| `repo` | `session` | off empieza cada tarea de cero, session comparte el contexto dentro de una sesión de la pantalla de inicio (o con --continue), repo lo comparte entre todas las tareas del repositorio. |
+| `context.max_runs` | integer | `5` | Número máximo de tareas anteriores que se pasan al agente. |
+| `context.stack` | boolean | `true` | Empezar un seguimiento desde la rama de la tarea anterior cuando sus cambios aún no están fusionados, para que el agente los vea. |
+| `context.statuses` | list of object | `["succeeded", "applied", "failed"]` | Qué tareas anteriores cuentan como contexto, según su estado final. *(avanzada)* |
+| `context.include` | list of object | `["task", "outcome", "changes", "summary"]` | Qué contar al agente de cada tarea anterior. *(avanzada)* |
+| `context.max_chars` | integer | `6000` | Tamaño máximo de todo el bloque de contexto; se descartan primero las tareas más antiguas. *(avanzada)* |
+| `context.summary_chars` | integer | `800` | Tamaño máximo del texto de resultado que se conserva de cada tarea anterior. *(avanzada)* |
+
 ## Verificación
 
 | Clave | Tipo | Por defecto | Significado |
@@ -181,6 +193,7 @@ Generado desde `src/timonel/schema/config.schema.yaml` con `scripts/gen_docs.py`
 | `tui.history` | boolean | `true` | Recordar lo que escribes entre sesiones (nunca se guardan líneas que parezcan secretos). |
 | `tui.history_size` | integer | `1000` | Número máximo de líneas recordadas. *(avanzada)* |
 | `tui.confirm_run` | boolean | `true` | Pedir confirmación después de mostrar el plan de una tarea. |
+| `tui.clear_screen` | boolean | `true` | Limpiar la terminal al abrir la pantalla de inicio, como una aplicación nueva. |
 | `tui.keys.profile` | string | `s-tab` | Cambiar de perfil (cheap, balanced, max). *(avanzada)* |
 | `tui.keys.mode` | string | `f2` | Alternar entre modo simple y experto en esta sesión. *(avanzada)* |
 | `tui.keys.help` | string | `f1` | Mostrar la ayuda. *(avanzada)* |

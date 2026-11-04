@@ -95,6 +95,18 @@ Generated from `src/timonel/schema/config.schema.yaml` by `scripts/gen_docs.py`;
 | `escalation.cooldown_minutes` | integer | `30` | Rest time for an agent after a usage limit. |
 | `escalation.reset_between_attempts` | boolean | `true` | Reset the worktree to the base commit before each new attempt. *(advanced)* |
 
+## Conversation context
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `context.scope` | `off` \| `session` \| `repo` | `session` | off starts every task fresh, session shares context within one home-screen session (or with --continue), repo shares it across all tasks of the repository. |
+| `context.max_runs` | integer | `5` | Maximum number of earlier tasks passed to the agent. |
+| `context.stack` | boolean | `true` | Start a follow-up from the branch of the previous task when its changes are not merged yet, so the agent sees them. |
+| `context.statuses` | list of object | `["succeeded", "applied", "failed"]` | Which earlier tasks count as context, by final status. *(advanced)* |
+| `context.include` | list of object | `["task", "outcome", "changes", "summary"]` | What to tell the agent about each earlier task. *(advanced)* |
+| `context.max_chars` | integer | `6000` | Maximum size of the whole context block; the oldest tasks are dropped first. *(advanced)* |
+| `context.summary_chars` | integer | `800` | Maximum size of the result text kept for each earlier task. *(advanced)* |
+
 ## Verification
 
 | Key | Type | Default | Meaning |
@@ -181,6 +193,7 @@ Generated from `src/timonel/schema/config.schema.yaml` by `scripts/gen_docs.py`;
 | `tui.history` | boolean | `true` | Remember what you type between sessions (lines that look like secrets are never saved). |
 | `tui.history_size` | integer | `1000` | Maximum number of remembered lines. *(advanced)* |
 | `tui.confirm_run` | boolean | `true` | Ask for confirmation after showing the plan of a task. |
+| `tui.clear_screen` | boolean | `true` | Clear the terminal when the home screen opens, like a fresh application. |
 | `tui.keys.profile` | string | `s-tab` | Cycle the profile (cheap, balanced, max). *(advanced)* |
 | `tui.keys.mode` | string | `f2` | Switch between simple and expert mode for this session. *(advanced)* |
 | `tui.keys.help` | string | `f1` | Show the help. *(advanced)* |

@@ -6,6 +6,7 @@ import re
 import shlex
 import shutil
 import threading
+import time
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import suppress
 from dataclasses import replace
@@ -39,6 +40,7 @@ SLASH_COMMANDS = (
     "ui",
     "learn",
     "git-init",
+    "new",
     "help",
     "clear",
     "exit",
@@ -87,6 +89,7 @@ class Shell:
         self.profile = config.default_profile
         self.mode = config.mode
         self.last_run: str | None = None
+        self.started = time.time()
         self.unbound: dict[str, str] = {}
         self.board = board or home.StatusBoard(
             config, tuple(sorted(default_names(config))), environ=self.environ
@@ -222,6 +225,9 @@ class Shell:
             self.invoke(("ui", "--repo", str(self.cwd)))
         elif name == "git-init":
             self.git_init()
+        elif name == "new":
+            self.started = time.time()
+            self.say(t("home.new_started"))
         else:
             self.passthrough(name, rest)
         return True
@@ -297,7 +303,9 @@ class Shell:
         from timonel import cli
         from timonel.engine import RunOptions
 
-        options = RunOptions(task=text, repo=self.cwd, profile=self.profile, plan=plan)
+        options = RunOptions(
+            task=text, repo=self.cwd, profile=self.profile, plan=plan, since=self.started
+        )
         try:
             run_id = engine.start(options)
         except Exception as error:
@@ -411,6 +419,8 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
     board = home.StatusBoard(config, tuple(sorted(default_names(config))), on_change=redraw)
     shell = Shell(config, cwd, console, board=board)
     shell_ref["shell"] = shell
+    if config.tui.clear_screen and console.is_terminal:
+        console.clear()
     console.print(shell.header(agents=False))
     if config.tui.check_on_start:
         board.start()

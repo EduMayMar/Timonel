@@ -5,7 +5,7 @@ import os
 import sqlite3
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -214,6 +214,18 @@ class Ledger:
             rows = self.connection.execute(
                 f"SELECT * FROM runs {where} ORDER BY created DESC LIMIT ?",
                 (*params, limit),
+            ).fetchall()
+        return [decode_run(row) for row in rows]
+
+    def recent_runs(
+        self, repo: str, *, since: float, statuses: Sequence[str], limit: int, exclude: str
+    ) -> list[dict[str, Any]]:
+        marks = ", ".join("?" * len(statuses))
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT * FROM runs WHERE repo = ? AND parent_id IS NULL AND created >= ?"
+                f" AND id != ? AND status IN ({marks}) ORDER BY created DESC LIMIT ?",
+                (repo, since, exclude, *statuses, limit),
             ).fetchall()
         return [decode_run(row) for row in rows]
 

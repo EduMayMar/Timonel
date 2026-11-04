@@ -371,7 +371,19 @@ class TuiSettings:
     history: bool = True
     history_size: int = 1000
     confirm_run: bool = True
+    clear_screen: bool = True
     keys: TuiKeys = field(default_factory=TuiKeys)
+
+
+@dataclass(frozen=True)
+class ContextSettings:
+    scope: Literal["off", "session", "repo"] = "session"
+    max_runs: int = 5
+    stack: bool = True
+    statuses: tuple[str, ...] = ("succeeded", "applied", "failed")
+    include: tuple[str, ...] = ("task", "outcome", "changes", "summary")
+    max_chars: int = 6000
+    summary_chars: int = 800
 
 
 @dataclass(frozen=True)
@@ -420,6 +432,7 @@ class Config:
     planner: PlannerSettings = field(default_factory=PlannerSettings)
     review: ReviewSettings = field(default_factory=ReviewSettings)
     escalation: Escalation = field(default_factory=Escalation)
+    context: ContextSettings = field(default_factory=ContextSettings)
     verification: Verification = field(default_factory=Verification)
     execution: Execution = field(default_factory=Execution)
     adaptive: Adaptive = field(default_factory=Adaptive)
