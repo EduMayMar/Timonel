@@ -280,6 +280,15 @@ def test_running_a_task_outside_git_offers_the_repository(
     assert "already in a git repository" in buffer.getvalue()
 
 
+REAL_TERMINAL = [
+    pytest.mark.skipif(
+        WINDOWS,
+        reason="ConPTY reads block on CI runners; the home screen is checked by hand in Windows Terminal",
+    ),
+    pytest.mark.timeout(120),
+]
+
+
 def spawn(argv: list[str], cwd: Path, env: dict[str, str]) -> Any:
     if WINDOWS:
         winpty = pytest.importorskip("winpty")
@@ -421,6 +430,8 @@ def terminal_env(fakes: Fakes, home: Path, repo: Path) -> dict[str, str]:
     return environment
 
 
+@REAL_TERMINAL[0]
+@REAL_TERMINAL[1]
 def test_terminal_session_task_slash_command_and_exit(
     terminal_env: dict[str, str], repo: Path, home: Path, terminals: list[Any]
 ) -> None:
@@ -455,6 +466,8 @@ def test_terminal_session_task_slash_command_and_exit(
     assert "add a greeting" in history
 
 
+@REAL_TERMINAL[0]
+@REAL_TERMINAL[1]
 def test_terminal_ctrl_c_cancels_a_running_task(
     terminal_env: dict[str, str], repo: Path, home: Path, terminals: list[Any]
 ) -> None:
