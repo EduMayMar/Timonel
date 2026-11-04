@@ -287,6 +287,8 @@
   "ui.setup.login": "Como fazer login",
   "ui.setup.login_hint": "Execute isto num terminal. A ferramenta oficial abre o próprio login; o Timonel só verifica o resultado depois.",
   "ui.setup.login_needed": "falta fazer login",
+  "ui.setup.login_unknown": "login não verificável",
+  "ui.setup.login_unknown_hint": "Este agente não tem um comando para saber se você já fez login. Se já fez, execute “timonel doctor --smoke” para confirmar com uma mensagem real.",
   "ui.setup.manual": "Não há pacote para o seu sistema; siga as instruções oficiais:",
   "ui.setup.no_project": "Não há .timonel.yaml neste repositório.",
   "ui.setup.privacy": "O Timonel nunca pede, vê nem guarda as senhas ou tokens das suas contas. O login acontece na ferramenta oficial, no seu terminal.",

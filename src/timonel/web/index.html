@@ -739,6 +739,7 @@ function setupItem(item) {
   let badge;
   if (!item.installed) badge = h("span", { class: "badge b-mute", text: t("agent.missing") });
   else if (item.auth === "key") badge = h("span", { class: "badge b-warn", text: t("setup.key_needed") });
+  else if (item.auth === "unknown") badge = h("span", { class: "badge b-mute", title: t("setup.login_unknown_hint"), text: t("setup.login_unknown") });
   else if (item.auth && item.auth !== "ok") badge = h("span", { class: `badge ${AUTH_TONE[item.auth] || "b-warn"}`, text: t("setup.login_needed") });
   else badge = h("span", { class: "badge b-ok", text: t("setup.ready") });
   const actions = h("div", { class: "toolbar" });

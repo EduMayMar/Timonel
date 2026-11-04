@@ -287,6 +287,8 @@
   "ui.setup.login": "How to log in",
   "ui.setup.login_hint": "Run this in a terminal. The official tool opens its own login; Timonel only checks the result afterwards.",
   "ui.setup.login_needed": "needs login",
+  "ui.setup.login_unknown": "login can't be checked",
+  "ui.setup.login_unknown_hint": "This agent has no command to tell whether you are logged in. If you already logged in, run “timonel doctor --smoke” to confirm with a real message.",
   "ui.setup.manual": "There is no package for your system; follow the official instructions:",
   "ui.setup.no_project": "No .timonel.yaml in this repository.",
   "ui.setup.privacy": "Timonel never asks for, sees or stores your account passwords or tokens. Logins happen in the official tool, in your terminal.",
