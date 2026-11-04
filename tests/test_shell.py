@@ -510,6 +510,8 @@ def test_new_command_forgets_earlier_tasks(
     assert "Earlier work" not in prompts[-1]
 
 
+@REAL_TERMINAL[0]
+@REAL_TERMINAL[1]
 def test_terminal_clears_the_screen_when_it_opens(
     terminal_env: dict[str, str], repo: Path, terminals: list[Any]
 ) -> None:
@@ -521,6 +523,8 @@ def test_terminal_clears_the_screen_when_it_opens(
     assert "\x1b[2J" in terminal.output
 
 
+@REAL_TERMINAL[0]
+@REAL_TERMINAL[1]
 def test_terminal_keeps_earlier_text_when_clear_screen_is_off(
     terminal_env: dict[str, str], repo: Path, home: Path, terminals: list[Any]
 ) -> None:
