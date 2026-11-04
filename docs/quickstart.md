@@ -35,6 +35,9 @@ The script shows the one command it will run (`uv tool install` or `pipx install
 running it. It never asks for administrator rights. Until the first PyPI release, set
 `TIMONEL_SOURCE=git+https://github.com/EduMayMar/Timonel` before running it.
 
+To store API keys in the system keyring, install the extra: `pipx install ".[keyring]"` from a
+checkout (or `pipx install "timonel[keyring]"` once it is on PyPI).
+
 The per-OS guides have more detail: [Windows](install/windows.md), [macOS](install/macos.md),
 [Linux](install/linux.md).
 

@@ -20,6 +20,18 @@ Run `timonel` with no arguments in a terminal and the home screen opens:
   for the session, F1 shows help, Ctrl+D leaves (on an empty line). Ctrl+C at any question
   cancels it and returns to the input box.
 
+## Context between tasks
+
+Within one home-screen session each task is told about the earlier ones (what was asked, how it
+ended, which files changed and a short summary), so "now add tests for it" works. `/new` starts a
+fresh context. With `context.stack` (default on) a follow-up starts from the previous task's branch
+when that change is not merged yet. Outside the home screen, `timonel run --continue` includes
+earlier tasks of the repository and `--no-context` ignores any configured context. Settings:
+`context.scope` (`off`, `session`, `repo`), `context.max_runs`, `context.statuses`,
+`context.include`, `context.max_chars`, `context.summary_chars`.
+
+The screen is cleared when it opens; set `tui.clear_screen: false` to keep what was on the terminal.
+
 ## Commands
 
 Type `/` to see them with a short description:

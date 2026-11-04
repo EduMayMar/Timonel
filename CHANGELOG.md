@@ -6,6 +6,26 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-04
+
+Highlights: 27 connectors (16 coding agents, 11 model APIs), a guided installer
+(`timonel start`), a web panel with setup checklist and settings, English/Spanish/Portuguese,
+a terminal home screen, and context carried between tasks. Details below.
+
+### Added (terminal home screen and context)
+
+- The home screen clears the terminal when it opens (`tui.clear_screen`, on by default).
+- Context between tasks: `context.scope` (`off`, `session`, `repo`), `context.max_runs`,
+  `context.stack`, `context.include` and size limits; `/new` starts fresh inside the home screen;
+  `timonel run --continue` reuses earlier tasks of the repository and `--no-context` ignores them.
+
+### Fixed (logins)
+
+- The web panel says "login can't be checked" instead of "needs login" for agents without a status
+  command (Copilot).
+- `doctor` finds provider API keys stored in the keyring (DeepSeek).
+- The installer checks the GitHub CLI login with `gh auth status`.
+
 ### Added
 
 - `timonel` with no arguments opens a home screen in the terminal: original wheel logo (color,
