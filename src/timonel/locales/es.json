@@ -161,6 +161,7 @@
   "home.no_prompt_toolkit": "La pantalla interactiva necesita el paquete prompt_toolkit (pip install prompt_toolkit); se muestra el resumen.",
   "home.notice": "Aviso",
   "home.notice.first_run": "Timonel aún no está configurado",
+  "home.notice.key": "{agent} necesita una clave de API",
   "home.notice.login": "{agent} necesita que inicies sesión",
   "home.notice.not_git": "esta carpeta no es un repositorio git; las tareas solo se pueden planificar",
   "home.notice.outdated": "{agent} es más antiguo que la versión con la que se comprobó Timonel ({version})",

@@ -28,15 +28,17 @@ State = Literal[
 LogoStyle = Literal["color", "mono", "ascii", "none"]
 
 LOGO = (
-    "        ██",
-    "  ▄█▄ ▄▄██▄▄ ▄█▄",
-    "   ▀██▀▀██▀▀██▀",
-    "   ██ ▀▄██▄▀ ██",
-    "██████████████████",
-    "   ██ ▄▀██▀▄ ██",
-    "   ▄██▄▄██▄▄██▄",
-    "  ▀█▀ ▀▀██▀▀ ▀█▀",
-    "        ██",
+    "         ██",
+    "   ▄▄   ▄▄██▄▄   ▄▄",
+    "   ▀████▀▀██▀▀████▀",
+    "    ██▀▄  ██  ▄▀██",
+    "   ██   ▀▄██▄▀   ██",
+    "██████████  ██████████",
+    "   ██   ▄▀██▀▄   ██",
+    "    ██▄▀  ██  ▀▄██",
+    "   ▄████▄▄██▄▄████▄",
+    "   ▀▀   ▀▀██▀▀   ▀▀",
+    "         ██",
 )
 LOGO_ASCII = (
     "     \\  |  /",
@@ -230,11 +232,9 @@ def notices(
         found.append(Notice(t("home.notice.not_git"), "/git-init"))
     for status in statuses.values():
         if "login" in wanted and status.state == "login":
-            found.append(
-                Notice(
-                    t("home.notice.login", agent=status.name), login_command(config, status.name)
-                )
-            )
+            command = login_command(config, status.name)
+            key = "home.notice.key" if command.startswith("timonel keys") else "home.notice.login"
+            found.append(Notice(t(key, agent=status.name), command))
         if "outdated" in wanted and (checked := outdated(config, status)):
             found.append(
                 Notice(

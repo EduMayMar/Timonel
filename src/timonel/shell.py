@@ -40,6 +40,13 @@ SLASH_COMMANDS = (
     "clear",
     "exit",
 )
+MENU_STYLE = {
+    "bottom-toolbar": "noreverse",
+    "completion-menu": "bg:#13233a #e8e2d0",
+    "completion-menu.completion.current": "bg:#c08a2c #0d1726",
+    "completion-menu.meta.completion": "bg:#13233a #9aa6b6",
+    "completion-menu.meta.completion.current": "bg:#c08a2c #0d1726",
+}
 PROFILE_ORDER = ("cheap", "balanced", "max")
 PASSTHROUGH: dict[str, tuple[str, ...]] = {
     "agents": ("agents",),
@@ -370,9 +377,12 @@ def ansi(renderable: RenderableType, console: Console) -> str:
 def interactive(config: Config, cwd: Path, console: Console) -> int:
     try:
         from prompt_toolkit import PromptSession
+        from prompt_toolkit import prompt as plain_prompt
         from prompt_toolkit.completion import Completer, Completion
+        from prompt_toolkit.filters import completion_is_selected
         from prompt_toolkit.formatted_text import ANSI
         from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.styles import Style
     except ImportError:
         return static(config, cwd, console, reason=t("home.no_prompt_toolkit"))
     shell_ref: dict[str, Shell] = {}
@@ -421,6 +431,14 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
     def leave(event: Any) -> None:
         event.app.exit(exception=EOFError())
 
+    @bindings.add("enter", filter=completion_is_selected)
+    def run_selected(event: Any) -> None:
+        buffer = event.current_buffer
+        state = buffer.complete_state
+        if state is not None and state.current_completion is not None:
+            buffer.apply_completion(state.current_completion)
+        buffer.validate_and_handle()
+
     keys = config.tui.keys
     bind(keys.profile, next_profile)
     bind(keys.mode, next_mode)
@@ -441,9 +459,8 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
         )
 
     def toolbar() -> Any:
-        return ANSI(
-            ansi(Group(Text(shell.status_line()), Text(shell.footer())), console).rstrip("\n")
-        )
+        lines = Group(Text(shell.status_line(), style="dim"), Text(shell.footer(), style="dim"))
+        return ANSI(ansi(lines, console).rstrip("\n"))
 
     history: Any = None
     if config.tui.history:
@@ -459,10 +476,11 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
         history=history,
         key_bindings=bindings,
         refresh_interval=config.tui.refresh_s,
-        enable_history_search=True,
+        reserve_space_for_menu=4,
+        style=Style.from_dict(MENU_STYLE),
     )
     session_ref["session"] = session
-    shell.ask = lambda question: session.prompt(question, bottom_toolbar=None, placeholder=None)
+    shell.ask = lambda question: plain_prompt(question)
     while True:
         try:
             line = session.prompt()

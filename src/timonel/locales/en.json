@@ -161,6 +161,7 @@
   "home.no_prompt_toolkit": "The interactive screen needs the prompt_toolkit package (pip install prompt_toolkit); showing the summary instead.",
   "home.notice": "Notice",
   "home.notice.first_run": "Timonel is not set up yet",
+  "home.notice.key": "{agent} needs an API key",
   "home.notice.login": "{agent} needs you to log in",
   "home.notice.not_git": "this folder is not a git repository; tasks can only be planned",
   "home.notice.outdated": "{agent} is older than the version Timonel was checked with ({version})",

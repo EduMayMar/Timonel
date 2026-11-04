@@ -75,6 +75,7 @@ ignore = ["S603", "S607", "S404", "S311", "E501"]
 "src/timonel/wizard.py" = ["S310"]
 "src/timonel/commands.py" = ["S310"]
 "src/timonel/ledger.py" = ["S608"]
+"scripts/terminal_screenshots.py" = ["S606"]
 "src/timonel/config.py" = ["S105"]
 
 [tool.mypy]

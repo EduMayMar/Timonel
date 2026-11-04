@@ -1,12 +1,14 @@
-        ██          Timonel 9.9.9  ·  agent router     
-  ▄█▄ ▄▄██▄▄ ▄█▄    Profile: balanced   Mode: simple   
-   ▀██▀▀██▀▀██▀     /work/projects/shop-api            
-   ██ ▀▄██▄▀ ██     branch main, uncommitted changes   
-██████████████████  Spend today: $1.25                 
-   ██ ▄▀██▀▄ ██     budget left: $3.75 of $5.00 per day
-   ▄██▄▄██▄▄██▄                                        
-  ▀█▀ ▀▀██▀▀ ▀█▀                                       
-        ██                                             
+         ██             Timonel 9.9.9  ·  agent router     
+   ▄▄   ▄▄██▄▄   ▄▄     Profile: balanced   Mode: simple   
+   ▀████▀▀██▀▀████▀     /work/projects/shop-api            
+    ██▀▄  ██  ▄▀██      branch main, uncommitted changes   
+   ██   ▀▄██▄▀   ██     Spend today: $1.25                 
+██████████  ██████████  budget left: $3.75 of $5.00 per day
+   ██   ▄▀██▀▄   ██                                        
+    ██▄▀  ██  ▀▄██                                         
+   ▄████▄▄██▄▄████▄                                        
+   ▀▀   ▀▀██▀▀   ▀▀                                        
+         ██                                                
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 Agents
 ● claude   ready         T1-T2 sonnet · T3-T4 opus · classifies · plans

@@ -42,6 +42,7 @@ nav:
   - Home: index.md
   - Getting started:
       - Quick start: quickstart.md
+      - Terminal home screen: terminal.md
       - Inicio rápido (es): quickstart.es.md
       - Windows: install/windows.md
       - macOS: install/macos.md

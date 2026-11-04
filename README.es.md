@@ -65,6 +65,15 @@ Instaladores que muestran lo que van a hacer antes de hacerlo:
 versión incluye binarios de un solo archivo para Windows, macOS y Linux y una imagen de contenedor.
 Guía paso a paso en español: [docs/quickstart.es.md](docs/quickstart.es.md).
 
+## La pantalla de inicio
+
+Escribe solo `timonel` y aparece una pantalla de inicio en la terminal: el estado de cada agente
+(comprobado en segundo plano), el gasto de hoy, avisos con el comando exacto que resuelve cada uno y
+una caja de entrada. Escribe una tarea con tus palabras, o `/` para ver los comandos; Timonel enseña
+el plan y pregunta antes de ejecutarla. Detalles: [docs/terminal.md](docs/terminal.md).
+
+![Pantalla de inicio de Timonel en la terminal, en español](docs/screenshots/terminal-home-es-80.png)
+
 ## Cómo funciona
 
 ```mermaid

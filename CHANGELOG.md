@@ -8,6 +8,24 @@ All notable changes are documented here. The format follows
 
 ### Added
 
+- `timonel` with no arguments opens a home screen in the terminal: original wheel logo (color,
+  monochrome, ASCII), profile, mode, folder and git state, agent states checked in the background
+  with a time limit and cache, spend and budget, actionable notices, an input box with history,
+  `/` commands with completion, plan-confirm-run with a live timeline and clean Ctrl+C.
+  Without a terminal it prints the header and the command list and exits 0; `timonel home --once`
+  prints only the header. New `tui.*` settings, also on the web Settings page.
+- `--no-color` on every command; plain-text header for screen readers.
+- Assisted `git init` with a first commit, a suggested `.gitignore` and a stop before committing files
+  that look like secrets.
+
+### Changed
+
+- `timonel plan` works in folders that are not git repositories. `timonel run` explains why it needs
+  one and offers to create it.
+- New dependency: prompt_toolkit (pure Python), see docs/terminal.md.
+
+### Added
+
 - `timonel start`: guided, resumable installer for Git, GitHub CLI, Node.js, pipx and agent CLIs with
   official package managers, `--dry-run`, `--yes --allow`, an audit log with undo commands and no
   automatic privilege elevation. Logins run the vendor's own command; API keys go to the keyring
