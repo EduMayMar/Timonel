@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "pyyaml>=6.0",
     "rich>=13.0",
+    "prompt_toolkit>=3.0.36",
     "pywinpty>=2.0; sys_platform == 'win32'",
 ]
 

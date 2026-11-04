@@ -1,0 +1,17 @@
+        ██          Timonel 9.9.9  ·  agent router     
+  ▄█▄ ▄▄██▄▄ ▄█▄    Profile: balanced   Mode: simple   
+   ▀██▀▀██▀▀██▀     /work/projects/shop-api            
+   ██ ▀▄██▄▀ ██     branch main, uncommitted changes   
+██████████████████  Spend today: $1.25                 
+   ██ ▄▀██▀▄ ██     budget left: $3.75 of $5.00 per day
+   ▄██▄▄██▄▄██▄                                        
+  ▀█▀ ▀▀██▀▀ ▀█▀                                       
+        ██                                             
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Agents
+● claude   ready         T1-T2 sonnet · T3-T4 opus · classifies · plans
+● codex    needs login   T2-T4 default model · plans
+● copilot  checking...   T1 auto · classifies
+● deepseek not installed T1 deepseek-flash · T2 deepseek-v4-pro · classifies
+! this project's .timonel.yaml is ignored until you trust it → timonel trust
+! codex needs you to log in → codex login

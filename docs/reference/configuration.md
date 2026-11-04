@@ -162,6 +162,30 @@ Generated from `src/timonel/schema/config.schema.yaml` by `scripts/gen_docs.py`;
 | `ui.shortcuts.theme` | string | `t` | Key that opens theme switch. *(advanced)* |
 | `ui.shortcuts.language` | string | `l` | Key that opens language switch. *(advanced)* |
 
+## Terminal home screen
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `tui.enabled` | boolean | `true` | Open the interactive home screen when timonel runs with no arguments in a terminal. |
+| `tui.logo` | `auto` \| `color` \| `mono` \| `ascii` \| `none` | `auto` | Logo style: auto picks color, monochrome or ASCII from the terminal. |
+| `tui.compact` | boolean | `false` | One-line header instead of the logo. |
+| `tui.plain` | boolean | `false` | Plain text without boxes or symbols, for screen readers. |
+| `tui.theme` | `auto` \| `dark` \| `light` | `auto` | Colors for dark or light terminals. |
+| `tui.show_spend` | boolean | `true` | Show today's spend and remaining budget. |
+| `tui.check_on_start` | boolean | `true` | Check agents in the background when the home screen opens. |
+| `tui.check_timeout_s` | integer | `20` | Seconds to wait for each agent check before showing 'no answer'. |
+| `tui.status_cache_s` | integer | `300` | Seconds an agent check is reused before checking again; 0 disables the cache. |
+| `tui.refresh_s` | number | `1.0` | How often the status bar is redrawn, in seconds. *(advanced)* |
+| `tui.notices` | list of string | `["first_run", "untrusted", "login", "outdated", "not_git"]` | Which actionable notices to show. |
+| `tui.placeholder` | string | `` | Hint inside the input box; empty uses the translated default. |
+| `tui.history` | boolean | `true` | Remember what you type between sessions (lines that look like secrets are never saved). |
+| `tui.history_size` | integer | `1000` | Maximum number of remembered lines. *(advanced)* |
+| `tui.confirm_run` | boolean | `true` | Ask for confirmation after showing the plan of a task. |
+| `tui.keys.profile` | string | `s-tab` | Cycle the profile (cheap, balanced, max). *(advanced)* |
+| `tui.keys.mode` | string | `f2` | Switch between simple and expert mode for this session. *(advanced)* |
+| `tui.keys.help` | string | `f1` | Show the help. *(advanced)* |
+| `tui.keys.exit` | string | `c-d` | Leave the home screen. *(advanced)* |
+
 ## Notifications
 
 | Key | Type | Default | Meaning |

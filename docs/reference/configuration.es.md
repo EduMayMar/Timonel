@@ -162,6 +162,30 @@ Generado desde `src/timonel/schema/config.schema.yaml` con `scripts/gen_docs.py`
 | `ui.shortcuts.theme` | string | `t` | Tecla que abre cambio de tema. *(avanzada)* |
 | `ui.shortcuts.language` | string | `l` | Tecla que abre cambio de idioma. *(avanzada)* |
 
+## Pantalla de inicio en terminal
+
+| Clave | Tipo | Por defecto | Significado |
+|---|---|---|---|
+| `tui.enabled` | boolean | `true` | Abrir la pantalla de inicio interactiva al ejecutar timonel sin argumentos en una terminal. |
+| `tui.logo` | `auto` \| `color` \| `mono` \| `ascii` \| `none` | `auto` | Estilo del logo: auto elige color, monocromo o ASCII según la terminal. |
+| `tui.compact` | boolean | `false` | Cabecera de una línea en lugar del logo. |
+| `tui.plain` | boolean | `false` | Texto plano sin cajas ni símbolos, para lectores de pantalla. |
+| `tui.theme` | `auto` \| `dark` \| `light` | `auto` | Colores para terminales oscuras o claras. |
+| `tui.show_spend` | boolean | `true` | Mostrar el gasto de hoy y el presupuesto restante. |
+| `tui.check_on_start` | boolean | `true` | Comprobar los agentes en segundo plano al abrir la pantalla de inicio. |
+| `tui.check_timeout_s` | integer | `20` | Segundos de espera por cada comprobación de agente antes de mostrar «sin respuesta». |
+| `tui.status_cache_s` | integer | `300` | Segundos que se reutiliza una comprobación de agente antes de repetirla; 0 desactiva la caché. |
+| `tui.refresh_s` | number | `1.0` | Cada cuántos segundos se redibuja la barra de estado. *(avanzada)* |
+| `tui.notices` | list of string | `["first_run", "untrusted", "login", "outdated", "not_git"]` | Qué avisos accionables mostrar. |
+| `tui.placeholder` | string | `` | Texto de ayuda dentro de la caja de entrada; vacío usa el predeterminado traducido. |
+| `tui.history` | boolean | `true` | Recordar lo que escribes entre sesiones (nunca se guardan líneas que parezcan secretos). |
+| `tui.history_size` | integer | `1000` | Número máximo de líneas recordadas. *(avanzada)* |
+| `tui.confirm_run` | boolean | `true` | Pedir confirmación después de mostrar el plan de una tarea. |
+| `tui.keys.profile` | string | `s-tab` | Cambiar de perfil (cheap, balanced, max). *(avanzada)* |
+| `tui.keys.mode` | string | `f2` | Alternar entre modo simple y experto en esta sesión. *(avanzada)* |
+| `tui.keys.help` | string | `f1` | Mostrar la ayuda. *(avanzada)* |
+| `tui.keys.exit` | string | `c-d` | Salir de la pantalla de inicio. *(avanzada)* |
+
 ## Notificaciones
 
 | Clave | Tipo | Por defecto | Significado |

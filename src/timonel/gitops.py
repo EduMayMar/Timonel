@@ -224,3 +224,59 @@ def merge_into_worktree(worktree: Path, branch: str, message: str) -> bool:
         git(worktree, "merge", "--abort", check=False)
         return False
     return True
+
+
+DEFAULT_GITIGNORE = (
+    ".env",
+    ".env.*",
+    "!.env.example",
+    "node_modules/",
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    "*.pyc",
+    "dist/",
+    "build/",
+    ".DS_Store",
+    "Thumbs.db",
+    "*.log",
+)
+SENSITIVE_NAMES = (
+    ".env",
+    ".npmrc",
+    ".pypirc",
+    "id_rsa",
+    "id_ed25519",
+    ".netrc",
+)
+SENSITIVE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
+
+
+def is_sensitive(path: str) -> bool:
+    name = PurePosixPath(path).name.lower()
+    if name == ".env.example":
+        return False
+    return (
+        name in SENSITIVE_NAMES
+        or name.startswith(".env.")
+        or name.endswith(SENSITIVE_SUFFIXES)
+        or (name.startswith("credentials") and name.endswith(".json"))
+        or "node_modules/" in path
+    )
+
+
+def init_repo(path: Path) -> None:
+    git(path, "init", "-q")
+
+
+def pending_files(path: Path) -> list[str]:
+    output = git(path, "status", "--porcelain", "--untracked-files=all", "-z")
+    return [entry[3:] for entry in output.split("\0") if len(entry) > 3]
+
+
+def first_commit(path: Path, message: str) -> None:
+    identity: list[str] = []
+    if not git(path, "config", "user.email", check=False).strip():
+        identity = ["-c", "user.name=Timonel user", "-c", "user.email=timonel@localhost"]
+    git(path, "add", "-A")
+    git(path, *identity, "commit", "-q", "--allow-empty", "-m", message)

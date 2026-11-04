@@ -16,6 +16,7 @@ x-areas:
 - budgets
 - privacy
 - ui
+- tui
 - notifications
 - hooks
 - paths
@@ -748,7 +749,8 @@ properties:
         default: false
         description: Let doctor ask PyPI for a newer version. Off by default; nothing else uses the network.
         x-i18n:
-          es: Permitir que doctor consulte PyPI por una versión nueva. Desactivado por defecto; nada más usa la red.
+          es: Permitir que doctor consulte PyPI por una versión nueva. Desactivado por defecto; nada más usa la
+            red.
           pt: Permitir que doctor consulte o PyPI por uma versão nova. Desativado por padrão; nada mais usa a rede.
   ui:
     type: object
@@ -895,6 +897,194 @@ properties:
             x-i18n:
               es: Tecla que abre cambio de idioma.
               pt: Tecla que abre troca de idioma.
+  tui:
+    type: object
+    additionalProperties: false
+    x-area: tui
+    description: Home screen shown when you run timonel with no arguments.
+    x-i18n:
+      es: Pantalla de inicio que aparece al ejecutar timonel sin argumentos.
+      pt: Tela inicial exibida ao executar timonel sem argumentos.
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Open the interactive home screen when timonel runs with no arguments in a terminal.
+        x-i18n:
+          es: Abrir la pantalla de inicio interactiva al ejecutar timonel sin argumentos en una terminal.
+          pt: Abrir a tela inicial interativa ao executar timonel sem argumentos num terminal.
+      logo:
+        type: string
+        default: auto
+        description: 'Logo style: auto picks color, monochrome or ASCII from the terminal.'
+        x-i18n:
+          es: 'Estilo del logo: auto elige color, monocromo o ASCII según la terminal.'
+          pt: 'Estilo do logo: auto escolhe cor, monocromático ou ASCII conforme o terminal.'
+        enum:
+        - auto
+        - color
+        - mono
+        - ascii
+        - none
+      compact:
+        type: boolean
+        default: false
+        description: One-line header instead of the logo.
+        x-i18n:
+          es: Cabecera de una línea en lugar del logo.
+          pt: Cabeçalho de uma linha em vez do logo.
+      plain:
+        type: boolean
+        default: false
+        description: Plain text without boxes or symbols, for screen readers.
+        x-i18n:
+          es: Texto plano sin cajas ni símbolos, para lectores de pantalla.
+          pt: Texto simples sem caixas nem símbolos, para leitores de tela.
+      theme:
+        type: string
+        default: auto
+        description: Colors for dark or light terminals.
+        x-i18n:
+          es: Colores para terminales oscuras o claras.
+          pt: Cores para terminais escuros ou claros.
+        enum:
+        - auto
+        - dark
+        - light
+      show_spend:
+        type: boolean
+        default: true
+        description: Show today's spend and remaining budget.
+        x-i18n:
+          es: Mostrar el gasto de hoy y el presupuesto restante.
+          pt: Mostrar o gasto de hoje e o orçamento restante.
+      check_on_start:
+        type: boolean
+        default: true
+        description: Check agents in the background when the home screen opens.
+        x-i18n:
+          es: Comprobar los agentes en segundo plano al abrir la pantalla de inicio.
+          pt: Verificar os agentes em segundo plano ao abrir a tela inicial.
+      check_timeout_s:
+        type: integer
+        default: 20
+        description: Seconds to wait for each agent check before showing 'no answer'.
+        x-i18n:
+          es: Segundos de espera por cada comprobación de agente antes de mostrar «sin respuesta».
+          pt: Segundos de espera por cada verificação de agente antes de mostrar «sem resposta».
+        minimum: 1
+        maximum: 300
+      status_cache_s:
+        type: integer
+        default: 300
+        description: Seconds an agent check is reused before checking again; 0 disables the cache.
+        x-i18n:
+          es: Segundos que se reutiliza una comprobación de agente antes de repetirla; 0 desactiva la caché.
+          pt: Segundos em que uma verificação de agente é reutilizada antes de repetir; 0 desativa o cache.
+        minimum: 0
+        maximum: 86400
+      refresh_s:
+        type: number
+        default: 1.0
+        description: How often the status bar is redrawn, in seconds.
+        x-i18n:
+          es: Cada cuántos segundos se redibuja la barra de estado.
+          pt: A cada quantos segundos a barra de status é redesenhada.
+        minimum: 0.2
+        maximum: 60
+        x-advanced: true
+      notices:
+        type: array
+        items:
+          type: string
+          enum:
+          - first_run
+          - untrusted
+          - login
+          - outdated
+          - not_git
+        default:
+        - first_run
+        - untrusted
+        - login
+        - outdated
+        - not_git
+        description: Which actionable notices to show.
+        x-i18n:
+          es: Qué avisos accionables mostrar.
+          pt: Quais avisos acionáveis mostrar.
+      placeholder:
+        type: string
+        default: ''
+        description: Hint inside the input box; empty uses the translated default.
+        x-i18n:
+          es: Texto de ayuda dentro de la caja de entrada; vacío usa el predeterminado traducido.
+          pt: Dica dentro da caixa de entrada; vazio usa o padrão traduzido.
+      history:
+        type: boolean
+        default: true
+        description: Remember what you type between sessions (lines that look like secrets are never saved).
+        x-i18n:
+          es: Recordar lo que escribes entre sesiones (nunca se guardan líneas que parezcan secretos).
+          pt: Lembrar o que você digita entre sessões (linhas que parecem segredos nunca são salvas).
+      history_size:
+        type: integer
+        default: 1000
+        description: Maximum number of remembered lines.
+        x-i18n:
+          es: Número máximo de líneas recordadas.
+          pt: Número máximo de linhas lembradas.
+        minimum: 0
+        maximum: 100000
+        x-advanced: true
+      confirm_run:
+        type: boolean
+        default: true
+        description: Ask for confirmation after showing the plan of a task.
+        x-i18n:
+          es: Pedir confirmación después de mostrar el plan de una tarea.
+          pt: Pedir confirmação depois de mostrar o plano de uma tarefa.
+      keys:
+        type: object
+        additionalProperties: false
+        x-advanced: true
+        description: Keyboard shortcuts of the home screen (prompt_toolkit key names such as s-tab, f2, c-d).
+        x-i18n:
+          es: Atajos de teclado de la pantalla de inicio (nombres de tecla de prompt_toolkit como s-tab, f2, c-d).
+          pt: Atalhos de teclado da tela inicial (nomes de tecla do prompt_toolkit como s-tab, f2, c-d).
+        properties:
+          profile:
+            type: string
+            pattern: ^[a-z0-9-]{1,12}$
+            default: s-tab
+            description: Cycle the profile (cheap, balanced, max).
+            x-i18n:
+              es: Cambiar de perfil (cheap, balanced, max).
+              pt: Alternar o perfil (cheap, balanced, max).
+          mode:
+            type: string
+            pattern: ^[a-z0-9-]{1,12}$
+            default: f2
+            description: Switch between simple and expert mode for this session.
+            x-i18n:
+              es: Alternar entre modo simple y experto en esta sesión.
+              pt: Alternar entre modo simples e especialista nesta sessão.
+          help:
+            type: string
+            pattern: ^[a-z0-9-]{1,12}$
+            default: f1
+            description: Show the help.
+            x-i18n:
+              es: Mostrar la ayuda.
+              pt: Mostrar a ajuda.
+          exit:
+            type: string
+            pattern: ^[a-z0-9-]{1,12}$
+            default: c-d
+            description: Leave the home screen.
+            x-i18n:
+              es: Salir de la pantalla de inicio.
+              pt: Sair da tela inicial.
   notifications:
     type: object
     additionalProperties: false
@@ -948,7 +1138,8 @@ properties:
     x-advanced: true
     description: Commands run around each run. Hooks from a project file need timonel trust.
     x-i18n:
-      es: Comandos que se ejecutan alrededor de cada ejecución. Los de un archivo de proyecto necesitan timonel trust.
+      es: Comandos que se ejecutan alrededor de cada ejecución. Los de un archivo de proyecto necesitan timonel
+        trust.
       pt: Comandos executados ao redor de cada execução. Os de um arquivo de projeto precisam de timonel trust.
     properties:
       pre_run:

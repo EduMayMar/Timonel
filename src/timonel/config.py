@@ -347,6 +347,34 @@ class UiSettings:
 
 
 @dataclass(frozen=True)
+class TuiKeys:
+    profile: str = "s-tab"
+    mode: str = "f2"
+    help: str = "f1"
+    exit: str = "c-d"
+
+
+@dataclass(frozen=True)
+class TuiSettings:
+    enabled: bool = True
+    logo: Literal["auto", "color", "mono", "ascii", "none"] = "auto"
+    compact: bool = False
+    plain: bool = False
+    theme: Literal["auto", "dark", "light"] = "auto"
+    show_spend: bool = True
+    check_on_start: bool = True
+    check_timeout_s: int = 20
+    status_cache_s: int = 300
+    refresh_s: float = 1.0
+    notices: tuple[str, ...] = ("first_run", "untrusted", "login", "outdated", "not_git")
+    placeholder: str = ""
+    history: bool = True
+    history_size: int = 1000
+    confirm_run: bool = True
+    keys: TuiKeys = field(default_factory=TuiKeys)
+
+
+@dataclass(frozen=True)
 class Notifications:
     events: tuple[str, ...] = ("succeeded", "failed")
     desktop: bool = False
@@ -399,6 +427,7 @@ class Config:
     budgets: tuple[Budget, ...] = ()
     privacy: Privacy = field(default_factory=Privacy)
     ui: UiSettings = field(default_factory=UiSettings)
+    tui: TuiSettings = field(default_factory=TuiSettings)
     notifications: Notifications = field(default_factory=Notifications)
     hooks: Hooks = field(default_factory=Hooks)
     paths: Paths = field(default_factory=Paths)

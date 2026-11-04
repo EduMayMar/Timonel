@@ -187,6 +187,11 @@ def test_errors_are_friendly(
 ) -> None:
     code, out = run_cli(capsys, "--config", str(cli_env), "run", "x", "--repo", str(tmp_path))
     assert code == 1 and "not inside a git repository" in out
+    assert "needs a git repository" in out and "/git-init" in out
+    code, out = run_cli(
+        capsys, "--config", str(cli_env), "plan", "explain x", "--repo", str(tmp_path)
+    )
+    assert code == 0 and "route" in out
     code, out = run_cli(capsys, "--config", str(cli_env), "status", "missing")
     assert code == 1 and "unknown run" in out
 

@@ -162,6 +162,30 @@ Gerado a partir de `src/timonel/schema/config.schema.yaml` por `scripts/gen_docs
 | `ui.shortcuts.theme` | string | `t` | Tecla que abre troca de tema. *(avançada)* |
 | `ui.shortcuts.language` | string | `l` | Tecla que abre troca de idioma. *(avançada)* |
 
+## Tela inicial no terminal
+
+| Chave | Tipo | Padrão | Significado |
+|---|---|---|---|
+| `tui.enabled` | boolean | `true` | Abrir a tela inicial interativa ao executar timonel sem argumentos num terminal. |
+| `tui.logo` | `auto` \| `color` \| `mono` \| `ascii` \| `none` | `auto` | Estilo do logo: auto escolhe cor, monocromático ou ASCII conforme o terminal. |
+| `tui.compact` | boolean | `false` | Cabeçalho de uma linha em vez do logo. |
+| `tui.plain` | boolean | `false` | Texto simples sem caixas nem símbolos, para leitores de tela. |
+| `tui.theme` | `auto` \| `dark` \| `light` | `auto` | Cores para terminais escuros ou claros. |
+| `tui.show_spend` | boolean | `true` | Mostrar o gasto de hoje e o orçamento restante. |
+| `tui.check_on_start` | boolean | `true` | Verificar os agentes em segundo plano ao abrir a tela inicial. |
+| `tui.check_timeout_s` | integer | `20` | Segundos de espera por cada verificação de agente antes de mostrar «sem resposta». |
+| `tui.status_cache_s` | integer | `300` | Segundos em que uma verificação de agente é reutilizada antes de repetir; 0 desativa o cache. |
+| `tui.refresh_s` | number | `1.0` | A cada quantos segundos a barra de status é redesenhada. *(avançada)* |
+| `tui.notices` | list of string | `["first_run", "untrusted", "login", "outdated", "not_git"]` | Quais avisos acionáveis mostrar. |
+| `tui.placeholder` | string | `` | Dica dentro da caixa de entrada; vazio usa o padrão traduzido. |
+| `tui.history` | boolean | `true` | Lembrar o que você digita entre sessões (linhas que parecem segredos nunca são salvas). |
+| `tui.history_size` | integer | `1000` | Número máximo de linhas lembradas. *(avançada)* |
+| `tui.confirm_run` | boolean | `true` | Pedir confirmação depois de mostrar o plano de uma tarefa. |
+| `tui.keys.profile` | string | `s-tab` | Alternar o perfil (cheap, balanced, max). *(avançada)* |
+| `tui.keys.mode` | string | `f2` | Alternar entre modo simples e especialista nesta sessão. *(avançada)* |
+| `tui.keys.help` | string | `f1` | Mostrar a ajuda. *(avançada)* |
+| `tui.keys.exit` | string | `c-d` | Sair da tela inicial. *(avançada)* |
+
 ## Notificações
 
 | Chave | Tipo | Padrão | Significado |
