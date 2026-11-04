@@ -178,6 +178,9 @@ def make_engine(config: Config, live: bool = False) -> Engine:
             verdict = {True: "approved", False: "rejected", None: "no verdict"}[data.get("approve")]
             issues = "; ".join(map(str, data.get("issues") or []))
             console.print(f"  [yellow]review {verdict}[/] {escape(issues)}")
+        elif kind == "context":
+            stacked = f", building on {data['stacked_on']}" if data.get("stacked_on") else ""
+            console.print(f"  [dim]context: {len(data['runs'])} earlier task(s){stacked}[/]")
         elif kind in ("cooldown", "budget", "race.winner", "decompose.plan", "hook.finished"):
             console.print(
                 f"  [yellow]{kind}[/] {escape(json.dumps(data, ensure_ascii=False)[:300])}"
@@ -277,6 +280,7 @@ def cmd_run(args: argparse.Namespace, config: Config) -> int:
         race=args.race,
         decompose=True if args.decompose else None,
         allow_dangerous=args.dangerous,
+        carry=True if args.carry else (False if args.no_context else None),
     )
     engine = make_engine(config, live=not args.json)
     run_id = engine.start(options)
@@ -622,6 +626,17 @@ def build_parser(simple: bool = False) -> argparse.ArgumentParser:
             )
             command.add_argument(
                 "--dangerous", action="store_true", help="pass permission-bypass flags (asks first)"
+            )
+            command.add_argument(
+                "--continue",
+                dest="carry",
+                action="store_true",
+                help="tell the agent about earlier tasks of this repository",
+            )
+            command.add_argument(
+                "--no-context",
+                action="store_true",
+                help="start fresh even if context is configured",
             )
             command.add_argument("--yes", action="store_true", help="answer yes to confirmations")
 

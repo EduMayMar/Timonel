@@ -12,6 +12,7 @@
     "classifier",
     "review",
     "escalation",
+    "context",
     "verification",
     "execution",
     "budgets",
@@ -1320,6 +1321,15 @@
             "pt": "Pedir confirmação depois de mostrar o plano de uma tarefa."
           }
         },
+        "clear_screen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Clear the terminal when the home screen opens, like a fresh application.",
+          "x-i18n": {
+            "es": "Limpiar la terminal al abrir la pantalla de inicio, como una aplicación nueva.",
+            "pt": "Limpar o terminal ao abrir a tela inicial, como um aplicativo novo."
+          }
+        },
         "keys": {
           "type": "object",
           "additionalProperties": false,
@@ -1370,6 +1380,123 @@
                 "pt": "Sair da tela inicial."
               }
             }
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-area": "context",
+      "description": "What the agents are told about earlier tasks, so follow-up requests make sense.",
+      "x-i18n": {
+        "es": "Qué saben los agentes de las tareas anteriores, para que las peticiones de seguimiento tengan sentido.",
+        "pt": "O que os agentes sabem das tarefas anteriores, para que os pedidos de seguimento façam sentido."
+      },
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "off",
+            "session",
+            "repo"
+          ],
+          "default": "session",
+          "description": "off starts every task fresh, session shares context within one home-screen session (or with --continue), repo shares it across all tasks of the repository.",
+          "x-i18n": {
+            "es": "off empieza cada tarea de cero, session comparte el contexto dentro de una sesión de la pantalla de inicio (o con --continue), repo lo comparte entre todas las tareas del repositorio.",
+            "pt": "off começa cada tarefa do zero, session compartilha o contexto dentro de uma sessão da tela inicial (ou com --continue), repo compartilha entre todas as tarefas do repositório."
+          }
+        },
+        "max_runs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 5,
+          "description": "Maximum number of earlier tasks passed to the agent.",
+          "x-i18n": {
+            "es": "Número máximo de tareas anteriores que se pasan al agente.",
+            "pt": "Número máximo de tarefas anteriores passadas ao agente."
+          }
+        },
+        "stack": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start a follow-up from the branch of the previous task when its changes are not merged yet, so the agent sees them.",
+          "x-i18n": {
+            "es": "Empezar un seguimiento desde la rama de la tarea anterior cuando sus cambios aún no están fusionados, para que el agente los vea.",
+            "pt": "Começar um acompanhamento a partir da branch da tarefa anterior quando suas mudanças ainda não foram mescladas, para que o agente as veja."
+          }
+        },
+        "statuses": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "succeeded",
+              "applied",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "succeeded",
+            "applied",
+            "failed"
+          ],
+          "description": "Which earlier tasks count as context, by final status.",
+          "x-advanced": true,
+          "x-i18n": {
+            "es": "Qué tareas anteriores cuentan como contexto, según su estado final.",
+            "pt": "Quais tarefas anteriores contam como contexto, pelo estado final."
+          }
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "task",
+              "outcome",
+              "changes",
+              "summary"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "task",
+            "outcome",
+            "changes",
+            "summary"
+          ],
+          "description": "What to tell the agent about each earlier task.",
+          "x-advanced": true,
+          "x-i18n": {
+            "es": "Qué contar al agente de cada tarea anterior.",
+            "pt": "O que contar ao agente sobre cada tarefa anterior."
+          }
+        },
+        "max_chars": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 100000,
+          "default": 6000,
+          "description": "Maximum size of the whole context block; the oldest tasks are dropped first.",
+          "x-advanced": true,
+          "x-i18n": {
+            "es": "Tamaño máximo de todo el bloque de contexto; se descartan primero las tareas más antiguas.",
+            "pt": "Tamanho máximo de todo o bloco de contexto; as tarefas mais antigas são descartadas primeiro."
+          }
+        },
+        "summary_chars": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 20000,
+          "default": 800,
+          "description": "Maximum size of the result text kept for each earlier task.",
+          "x-advanced": true,
+          "x-i18n": {
+            "es": "Tamaño máximo del texto de resultado que se conserva de cada tarea anterior.",
+            "pt": "Tamanho máximo do texto de resultado mantido de cada tarefa anterior."
           }
         }
       }

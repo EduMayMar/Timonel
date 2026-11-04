@@ -476,3 +476,47 @@ def test_terminal_ctrl_c_cancels_a_running_task(
     terminal.write("\x04")
     expect(terminal, "Bye.")
     assert terminal.wait(15) == 0
+
+
+def test_new_command_forgets_earlier_tasks(
+    env: Fakes, repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    instance, buffer = make_shell(repo, ["y", "y", "y"])
+    assert instance.handle("add a greeting [[edit all:greet.py=print('hi')]]")
+    assert instance.handle("now add a test [[edit all:test_greet.py=assert True]]")
+    prompts = [
+        str(call["prompt"]) for call in env.calls() if "TIMONEL_CLASSIFY" not in str(call["prompt"])
+    ]
+    assert "add a greeting" in prompts[-1]
+    assert instance.handle("/new")
+    assert "New conversation" in buffer.getvalue()
+    assert instance.handle("a third change [[edit all:third.py=1]]")
+    prompts = [
+        str(call["prompt"]) for call in env.calls() if "TIMONEL_CLASSIFY" not in str(call["prompt"])
+    ]
+    assert "Earlier work" not in prompts[-1]
+
+
+def test_terminal_clears_the_screen_when_it_opens(
+    terminal_env: dict[str, str], repo: Path, terminals: list[Any]
+) -> None:
+    if WINDOWS:
+        pytest.skip("ConPTY escape sequences are not verified")
+    terminal = spawn([sys.executable, "-m", "timonel"], repo, terminal_env)
+    terminals.append(terminal)
+    expect(terminal, "Describe a task")
+    assert "\x1b[2J" in terminal.output
+
+
+def test_terminal_keeps_earlier_text_when_clear_screen_is_off(
+    terminal_env: dict[str, str], repo: Path, home: Path, terminals: list[Any]
+) -> None:
+    if WINDOWS:
+        pytest.skip("ConPTY escape sequences are not verified")
+    (home / "routes.yaml").write_text(
+        TEST_ROUTES + "tui: {check_timeout_s: 10, clear_screen: false}\n", encoding="utf-8"
+    )
+    terminal = spawn([sys.executable, "-m", "timonel"], repo, terminal_env)
+    terminals.append(terminal)
+    expect(terminal, "Describe a task")
+    assert "\x1b[2J" not in terminal.output
