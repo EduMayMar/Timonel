@@ -477,5 +477,8 @@
   "wizard.welcome": "Welcome to Timonel. This assistant checks what you need, explains each step and asks before changing anything.",
   "wizard.what": "What it is",
   "wizard.why": "Why Timonel needs it",
-  "wizard.write_config": "Enable the agents you set up in your configuration?"
+  "wizard.write_config": "Enable the agents you set up in your configuration?",
+  "home.agents_on": "on",
+  "home.agents_off": "off",
+  "home.agents_pick": "Numbers to turn on/off (Enter to finish):"
 }

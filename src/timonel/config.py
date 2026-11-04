@@ -366,6 +366,7 @@ class TuiSettings:
     show_spend: bool = True
     check_on_start: bool = True
     classify_with_model: bool = True
+    confirm_read_only: bool = False
     check_timeout_s: int = 20
     status_cache_s: int = 300
     refresh_s: float = 1.0

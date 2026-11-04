@@ -195,6 +195,7 @@ Gerado a partir de `src/timonel/schema/config.schema.yaml` por `scripts/gen_docs
 | `tui.history` | boolean | `true` | Lembrar o que você digita entre sessões (linhas que parecem segredos nunca são salvas). |
 | `tui.history_size` | integer | `1000` | Número máximo de linhas lembradas. *(avançada)* |
 | `tui.confirm_run` | boolean | `true` | Pedir confirmação depois de mostrar o plano de uma tarefa. |
+| `tui.confirm_read_only` | boolean | `false` | Pedir confirmação também antes de tarefas somente leitura que não podem alterar arquivos. |
 | `tui.classify_with_model` | boolean | `true` | Classificar cada tarefa com o modelo classificador barato antes de planejar, em vez de só regras de palavras-chave. |
 | `tui.clear_screen` | boolean | `true` | Limpar o terminal ao abrir a tela inicial, como um aplicativo novo. |
 | `tui.keys.profile` | string | `s-tab` | Alternar o perfil (cheap, balanced, max). *(avançada)* |

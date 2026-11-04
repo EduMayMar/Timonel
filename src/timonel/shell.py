@@ -225,6 +225,8 @@ class Shell:
             self.invoke(("ui", "--repo", str(self.cwd)))
         elif name == "git-init":
             self.git_init()
+        elif name == "agents" and not rest:
+            self.agents_menu()
         elif name == "new":
             self.started = time.time()
             self.say(t("home.new_started"))
@@ -244,6 +246,32 @@ class Shell:
             self.board.start(force=True)
         if name in ("apply", "discard"):
             self.refresh_info()
+
+    def agents_menu(self) -> None:
+        from timonel.config import load_config
+
+        while True:
+            names = sorted(self.config.agents)
+            for number, name in enumerate(names, 1):
+                enabled = self.config.agents[name].enabled
+                state = t("home.agents_on" if enabled else "home.agents_off")
+                self.say(f"  {number}) {'●' if enabled else '○'} {name:<10} {state}")
+            answer = self.ask(t("home.agents_pick") + " ").strip()
+            picked = [
+                names[int(token) - 1]
+                for token in answer.replace(",", " ").split()
+                if token.isdigit() and 1 <= int(token) <= len(names)
+            ]
+            if not picked:
+                return
+            for name in picked:
+                action = "disable" if self.config.agents[name].enabled else "enable"
+                self.invoke(("agents", action, name))
+            try:
+                self.config = load_config(repo=home.place_of(self.cwd).repo)
+            except Exception as error:
+                self.say(str(error))
+                return
 
     def choose_profile(self, rest: list[str]) -> None:
         if not rest:
@@ -295,7 +323,7 @@ class Shell:
             self.say(t("home.run_needs_git"))
             if not self.git_init():
                 return
-        if self.config.tui.confirm_run:
+        if self.config.tui.confirm_run and (plan.write or self.config.tui.confirm_read_only):
             answer = self.ask(t("home.confirm_run") + " [Y/n] ").strip()
             if answer and not wizard.yes(answer):
                 self.say(t("common.aborted"))

@@ -195,6 +195,7 @@ Generated from `src/timonel/schema/config.schema.yaml` by `scripts/gen_docs.py`;
 | `tui.history` | boolean | `true` | Remember what you type between sessions (lines that look like secrets are never saved). |
 | `tui.history_size` | integer | `1000` | Maximum number of remembered lines. *(advanced)* |
 | `tui.confirm_run` | boolean | `true` | Ask for confirmation after showing the plan of a task. |
+| `tui.confirm_read_only` | boolean | `false` | Also ask for confirmation before read-only tasks that cannot change files. |
 | `tui.classify_with_model` | boolean | `true` | Classify each task with the cheap classifier model before planning, instead of keyword rules only. |
 | `tui.clear_screen` | boolean | `true` | Clear the terminal when the home screen opens, like a fresh application. |
 | `tui.keys.profile` | string | `s-tab` | Cycle the profile (cheap, balanced, max). *(advanced)* |

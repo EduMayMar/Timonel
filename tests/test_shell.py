@@ -119,7 +119,7 @@ def test_slash_commands_reuse_the_cli_handlers(
     restarted: list[bool] = []
     monkeypatch.setattr(instance.board, "start", lambda force=False: restarted.append(force) or [])
     for line in (
-        "/agents",
+        "/agents list",
         "/stats",
         "/config get mode",
         "/learn",
@@ -526,3 +526,27 @@ def test_terminal_keeps_earlier_text_when_clear_screen_is_off(
     terminals.append(terminal)
     expect(terminal, "Describe a task")
     assert "\x1b[2J" not in terminal.output
+
+
+def test_agents_menu_flips_an_agent_and_saves_it(env: Fakes, repo: Path, home: Path) -> None:
+    instance, buffer = make_shell(repo, ["2", ""])
+    second = sorted(instance.config.agents)[1]
+    before = instance.config.agents[second].enabled
+    assert instance.handle("/agents")
+    assert instance.config.agents[second].enabled is (not before)
+    assert ("●" if not before else "○") in buffer.getvalue()
+
+
+def test_agents_menu_twice_restores_the_agent(env: Fakes, repo: Path, home: Path) -> None:
+    instance, _ = make_shell(repo, ["2", "2", ""])
+    second = sorted(instance.config.agents)[1]
+    before = instance.config.agents[second].enabled
+    assert instance.handle("/agents")
+    assert instance.config.agents[second].enabled is before
+
+
+def test_read_only_task_runs_without_asking(env: Fakes, repo: Path) -> None:
+    instance, buffer = make_shell(repo, [])
+    assert instance.handle("explain greet.py [[say:it prints hi]]")
+    assert "Run this plan?" not in buffer.getvalue()
+    assert instance.last_run is not None
