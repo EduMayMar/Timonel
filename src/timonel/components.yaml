@@ -23,7 +23,7 @@ gh:
   title: GitHub CLI
   homepage: https://cli.github.com
   optional: true
-  login: {argv: [gh, auth, login], flow: browser}
+  login: {argv: [gh, auth, login], check: [gh, auth, status], flow: browser}
   install:
     winget: {argv: [winget, install, --id, GitHub.cli, --source, winget], verified: "github.com/cli/cli docs/install_windows.md"}
     scoop: {argv: [scoop, install, gh], verified: "github.com/cli/cli docs/install_windows.md"}

@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -365,3 +366,39 @@ def test_single_letter_s_means_skip_never_yes() -> None:
             assert wizard.yes("yes")
     finally:
         i18n.set_language(previous)
+
+
+def gh_component() -> wizard.Component:
+    return next(item for item in wizard.tool_components() if item.key == "gh")
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        (types.SimpleNamespace(timed_out=False, exit_code=0), "ok"),
+        (types.SimpleNamespace(timed_out=False, exit_code=1), "missing"),
+        (types.SimpleNamespace(timed_out=True, exit_code=-1), "unknown"),
+        (None, "unknown"),
+    ],
+)
+def test_gh_login_state_comes_from_gh_auth_status(
+    monkeypatch: pytest.MonkeyPatch, outcome: object, expected: str
+) -> None:
+    asked: list[list[str]] = []
+
+    def fake_quick(argv: list[str], env: object) -> object:
+        asked.append(argv)
+        return outcome
+
+    monkeypatch.setattr(wizard, "quick", fake_quick)
+    assert wizard.auth_state(gh_component(), make_config(), {}) == expected
+    assert asked == [["gh", "auth", "status"]]
+
+
+def test_login_is_skipped_when_gh_is_already_logged_in(
+    system: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(wizard, "auth_state", lambda component, config, environ: "ok")
+    session = session_for(system, [])
+    assert wizard.login_component(session, make_config(), gh_component()) == "ok"
+    assert not Path(str(system["log"])).exists() or Path(str(system["log"])).read_text() == ""

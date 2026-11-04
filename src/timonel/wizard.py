@@ -25,7 +25,7 @@ import yaml
 from timonel import keys
 from timonel.adapters import strip_controls
 from timonel.config import Config
-from timonel.doctor import check_auth, safe_env
+from timonel.doctor import check_auth, quick, safe_env
 from timonel.i18n import t
 from timonel.ledger import data_dir
 from timonel.proc import LaunchError, resolve_launch, which
@@ -88,6 +88,7 @@ class Component:
     size_mb: int | None = None
     optional: bool = False
     login: tuple[str, ...] = ()
+    login_check: tuple[str, ...] = ()
     flow: str = "browser"
     key_env: str = ""
     key_url: str = ""
@@ -176,6 +177,7 @@ def tool_components() -> list[Component]:
                 },
                 optional=bool(data.get("optional")),
                 login=tuple(login.get("argv", [])),
+                login_check=tuple(login.get("check", [])),
                 flow=str(login.get("flow", "browser")),
                 what=t(f"tool.{key}.what"),
                 homepage=data.get("homepage", ""),
@@ -245,6 +247,11 @@ def installed(component: Component, environ: Mapping[str, str]) -> bool:
 
 
 def auth_state(component: Component, config: Config, environ: Mapping[str, str]) -> str:
+    if component.login_check:
+        result = quick(list(component.login_check), dict(environ))
+        if result is None or result.timed_out:
+            return "unknown"
+        return "ok" if result.exit_code == 0 else "missing"
     agent = config.agents.get(component.key)
     if agent is None:
         return "unknown"
