@@ -1,0 +1,27 @@
+name: droid
+kind: agent
+title: Factory Droid
+vendor: Factory
+homepage: https://docs.factory.ai/cli/getting-started/overview
+verification: {status: verified, version: 1.2.0, date: "2026-11-03", source: "droid --help; droid exec --help"}
+install:
+  approx_size_mb: 325
+  npm: ["npm", "install", "-g", "@factory/cli"]
+  pnpm: ["pnpm", "add", "-g", "@factory/cli"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@factory/cli"], pnpm: ["pnpm", "remove", "-g", "@factory/cli"]}
+  drift: {npm: "@factory/cli", help: [["exec", "--help"]]}
+login: {command: ["droid"], flow: browser}
+agent:
+  enabled: false
+  command: droid
+  billing: subscription
+  parser: text
+  prompt_via: file
+  base_args: ["exec", "--output-format", "text"]
+  read_args: []
+  write_args: ["--auto", "low"]
+  model_args: ["--model", "{model}"]
+  effort_args: ["--reasoning-effort", "{effort}"]
+  prompt_args: ["--file", "{prompt_file}"]
+  dangerous_args: ["--skip-permissions-unsafe"]
+  detect: {version: ["--version"]}

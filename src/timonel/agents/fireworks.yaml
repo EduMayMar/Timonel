@@ -1,0 +1,9 @@
+name: fireworks
+kind: provider
+title: Fireworks AI
+vendor: Fireworks AI
+homepage: "https://api.fireworks.ai/inference/v1"
+verification: {status: unverified, date: "2026-11-03", source: "base URL from third-party integration guides; check the provider's documentation"}
+api_key: {env: FIREWORKS_API_KEY}
+provider: {api: openai, base_url: "https://api.fireworks.ai/inference/v1", key_env: FIREWORKS_API_KEY}
+agent: {command: fireworks, billing: api, parser: text}

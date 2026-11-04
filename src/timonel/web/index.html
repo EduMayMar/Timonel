@@ -1,0 +1,1006 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{CSRF}}">
+<meta name="color-scheme" content="light dark">
+<title>Timonel</title>
+<style nonce="{{NONCE}}">
+:root {
+  --paper: #f4f1e8; --paper-2: #ebe6d6; --card: #fbfaf5; --ink: #13233a; --ink-2: #3f4f66; --muted: #5d6b7e;
+  --line: #d4ccb6; --grid: rgba(19, 35, 58, .045); --brass: #8a5a12; --brass-soft: #f3e3c3; --focus: #1d5fd1;
+  --ok: #1d6b3a; --ok-soft: #dcefe1; --bad: #a32a1f; --bad-soft: #f6dcd8; --warn: #8a5300; --warn-soft: #f8e7c8;
+  --info: #1b4f86; --info-soft: #dbe7f5; --code: #fffdf7; --add: #e3f2e5; --del: #f8e1de;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --r: 6px; --s1: .25rem; --s2: .5rem; --s3: .75rem; --s4: 1rem; --s5: 1.5rem; --s6: 2rem;
+}
+:root[data-theme="dark"] {
+  --paper: #0d1726; --paper-2: #13203345; --card: #132134; --ink: #e8e2d0; --ink-2: #c3c9d4; --muted: #9aa6b6;
+  --line: #2a3a52; --grid: rgba(232, 226, 208, .035); --brass: #e0b25c; --brass-soft: #3a2e14; --focus: #7fb0ff;
+  --ok: #7fd49a; --ok-soft: #173a25; --bad: #ff9b8e; --bad-soft: #43201c; --warn: #f2c26b; --warn-soft: #3d2f12;
+  --info: #9cc4ff; --info-soft: #172d4a; --code: #0f1b2c; --add: #163522; --del: #3f1d1a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1726; --paper-2: #13203345; --card: #132134; --ink: #e8e2d0; --ink-2: #c3c9d4; --muted: #9aa6b6;
+    --line: #2a3a52; --grid: rgba(232, 226, 208, .035); --brass: #e0b25c; --brass-soft: #3a2e14; --focus: #7fb0ff;
+    --ok: #7fd49a; --ok-soft: #173a25; --bad: #ff9b8e; --bad-soft: #43201c; --warn: #f2c26b; --warn-soft: #3d2f12;
+    --info: #9cc4ff; --info-soft: #172d4a; --code: #0f1b2c; --add: #163522; --del: #3f1d1a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font: 15px/1.5 var(--sans); color: var(--ink); background-color: var(--paper);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px; min-height: 100vh;
+}
+a { color: var(--info); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -999px; top: 0; background: var(--card); padding: var(--s2) var(--s3); z-index: 10; }
+.skip:focus { left: var(--s3); }
+.shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+.shell > * { min-width: 0; }
+.rail { border-right: 1px solid var(--line); background: var(--card); padding: var(--s5) var(--s4); display: flex; flex-direction: column; gap: var(--s5); position: sticky; top: 0; height: 100vh; }
+.brand { display: flex; align-items: center; gap: var(--s3); color: var(--ink); text-decoration: none; }
+.brand svg { width: 38px; height: 38px; color: var(--brass); flex: none; }
+.brand b { font: 600 1.45rem/1 var(--serif); letter-spacing: .01em; }
+.brand small { display: block; color: var(--muted); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; margin-top: 3px; }
+nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav a { display: flex; justify-content: space-between; align-items: center; padding: var(--s2) var(--s3); border-radius: var(--r); color: var(--ink-2); text-decoration: none; font-weight: 500; }
+nav a:hover { background: var(--paper-2); color: var(--ink); }
+nav a[aria-current="page"] { background: var(--ink); color: var(--paper); }
+nav kbd { font: .72rem var(--mono); opacity: .7; }
+.rail-foot { overflow-wrap: anywhere; margin-top: auto; display: grid; gap: var(--s2); font-size: .85rem; color: var(--muted); }
+.rail-foot .row { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.rail-foot .row button { white-space: nowrap; overflow-wrap: normal; }
+main { padding: var(--s6) clamp(1rem, 4vw, 3rem); max-width: 1180px; width: 100%; }
+main > * + * { margin-top: var(--s5); }
+main > h1 + .lede { margin-top: 0; }
+h1 { font: 600 2rem/1.15 var(--serif); margin: 0 0 var(--s1); }
+h2 { font: 600 1.2rem/1.3 var(--serif); margin: 0 0 var(--s3); }
+h3, h2.eyebrow { font-size: .8rem; font-family: var(--sans); font-weight: 600; line-height: 1.3; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 var(--s2); }
+.lede { color: var(--muted); margin: 0 0 var(--s5); }
+.grid { display: grid; gap: var(--s4); }
+.cols-3 { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.cols-2 { grid-template-columns: 1fr 1fr; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s4); }
+.card.flat { padding: 0; overflow: hidden; }
+.figure { font: 600 1.9rem/1.1 var(--serif); }
+.figure small { font: 500 .85rem var(--sans); color: var(--muted); }
+.agent { display: grid; gap: var(--s1); }
+.agent header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s2); }
+.agent b { font: 600 1.05rem var(--mono); }
+.meta { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.badge { display: inline-flex; align-items: center; gap: .3em; padding: 1px .55em; border-radius: 999px; font-size: .78rem; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.badge::before { content: ""; width: .5em; height: .5em; border-radius: 50%; background: currentColor; }
+.b-ok { color: var(--ok); background: var(--ok-soft); }
+.b-bad { color: var(--bad); background: var(--bad-soft); }
+.b-warn { color: var(--warn); background: var(--warn-soft); }
+.b-info { color: var(--info); background: var(--info-soft); }
+.b-mute { color: var(--muted); background: var(--paper-2); border-color: var(--line); }
+.tag { font: .75rem var(--mono); color: var(--ink-2); background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 .4em; }
+button, .btn { font: 600 .9rem var(--sans); border-radius: var(--r); border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: .45rem .9rem; cursor: pointer; display: inline-flex; gap: .4rem; align-items: center; }
+button:hover { border-color: var(--ink-2); }
+button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+button.brass { background: var(--brass); color: #fff; border-color: var(--brass); }
+:root[data-theme="dark"] button.brass { color: #1a1206; }
+button.danger { color: var(--bad); border-color: currentColor; }
+button.ghost { background: transparent; border-color: transparent; padding: .3rem .5rem; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+label { font-weight: 600; font-size: .9rem; display: block; margin-bottom: var(--s1); }
+textarea, input[type="text"], input[type="search"], input[type="number"], select { font: inherit; color: var(--ink); background: var(--code); border: 1px solid var(--line); border-radius: var(--r); padding: .5rem .6rem; width: 100%; }
+textarea { min-height: 150px; resize: vertical; font-family: var(--mono); font-size: .9rem; }
+.hint { color: var(--muted); font-size: .82rem; margin-top: var(--s1); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { margin: 0; padding: .4rem .9rem; cursor: pointer; font-weight: 600; border-right: 1px solid var(--line); background: var(--card); }
+.seg label:last-of-type { border-right: 0; }
+.seg input:checked + label { background: var(--ink); color: var(--paper); }
+.seg input:focus-visible + label { outline: 3px solid var(--focus); outline-offset: -3px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; }
+.check { display: inline-flex; gap: .4rem; align-items: center; font-weight: 500; margin: 0; }
+.stack { display: grid; gap: var(--s4); }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th { text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+th, td { padding: .55rem .75rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: var(--paper-2); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.empty { color: var(--muted); padding: var(--s5); text-align: center; }
+.reasons { margin: 0; padding-left: 1.1rem; color: var(--ink-2); }
+.reasons li { margin: .15rem 0; }
+.ladders { display: grid; gap: var(--s3); }
+.ladder { border: 1px solid var(--line); border-radius: var(--r); background: var(--card); }
+.ladder > header { display: flex; justify-content: space-between; align-items: center; padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line); background: var(--paper-2); }
+.ladder > header b { font-family: var(--serif); }
+.rungs { list-style: none; margin: 0; padding: var(--s2); display: grid; gap: var(--s2); min-height: 48px; }
+.rung { display: grid; grid-template-columns: auto 1fr 1fr 1fr auto auto; gap: var(--s2); align-items: center; padding: var(--s2); border: 1px solid var(--line); border-radius: var(--r); background: var(--code); }
+.rung.dragging { opacity: .4; }
+.rungs.over { outline: 2px dashed var(--brass); outline-offset: -4px; }
+.grip { cursor: grab; color: var(--muted); font: 1rem var(--mono); user-select: none; padding: 0 .2rem; }
+.rung input, .rung select { padding: .3rem .45rem; font-size: .85rem; }
+.billing { font: .72rem var(--mono); text-transform: uppercase; color: var(--muted); }
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.timeline::before { content: ""; position: absolute; left: 11px; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
+.timeline li { position: relative; padding: 0 0 var(--s3) 34px; }
+.timeline li::before { content: ""; position: absolute; left: 5px; top: 5px; width: 14px; height: 14px; border-radius: 50%; background: var(--card); border: 2px solid var(--muted); }
+.timeline li.ok::before { border-color: var(--ok); background: var(--ok-soft); }
+.timeline li.bad::before { border-color: var(--bad); background: var(--bad-soft); }
+.timeline li.warn::before { border-color: var(--warn); background: var(--warn-soft); }
+.timeline li.run::before { border-color: var(--info); background: var(--info-soft); }
+.timeline time { color: var(--muted); font: .75rem var(--mono); margin-right: .4rem; }
+pre.console, pre.diff { font: .8rem/1.45 var(--mono); background: var(--code); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s3); margin: 0; max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+pre.diff { white-space: pre; max-height: 560px; padding: 0; }
+pre.diff span { display: block; padding: 0 var(--s3); }
+pre.diff .add { background: var(--add); }
+pre.diff .del { background: var(--del); }
+pre.diff .hunk { color: var(--info); background: var(--info-soft); }
+pre.diff .file { font-weight: 700; background: var(--paper-2); }
+.bars { display: grid; gap: var(--s2); }
+.bar { display: grid; grid-template-columns: 110px 1fr 70px; gap: var(--s2); align-items: center; font-size: .85rem; }
+.bar .track { height: 12px; background: var(--paper-2); border-radius: 3px; overflow: hidden; border: 1px solid var(--line); }
+.bar .fill { height: 100%; background: var(--brass); }
+.bar .name { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .val { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tiers-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); }
+.tiers-board .rung { grid-template-columns: auto 1fr auto; }
+.tiers-board .rung .fields { display: grid; gap: var(--s1); min-width: 0; }
+.tiers-board .rung > span:last-child { display: grid; }
+.tiers-board .rung { padding: var(--s2) var(--s1); }
+.problems { color: var(--bad); background: var(--bad-soft); border-radius: var(--r); padding: var(--s3); font: .85rem var(--mono); white-space: pre-wrap; }
+.toast { position: fixed; bottom: var(--s4); right: var(--s4); background: var(--ink); color: var(--paper); padding: var(--s3) var(--s4); border-radius: var(--r); max-width: min(420px, 90vw); z-index: 20; }
+.toast[hidden] { display: none; }
+dialog { border: 1px solid var(--line); border-radius: var(--r); background: var(--card); color: var(--ink); max-width: 520px; width: 92vw; }
+dialog::backdrop { background: rgba(10, 18, 30, .5); }
+dl.keys { display: grid; grid-template-columns: auto 1fr; gap: var(--s2) var(--s4); margin: 0; }
+dl.keys dt { font-family: var(--mono); }
+dl.keys dd { margin: 0; color: var(--ink-2); }
+kbd.k { font: .8rem var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 .35em; background: var(--code); }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--s4); align-items: start; }
+.cmd { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.cmd code { font-family: var(--mono); background: var(--code); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s1) var(--s2); overflow-wrap: anywhere; }
+ul.plain { list-style: none; padding: 0; margin: 0; }
+.setup-item header { justify-content: flex-start; }
+dl.options { margin: 0; }
+.option { display: grid; grid-template-columns: minmax(12rem, 1fr) 2fr; gap: var(--s3); padding: var(--s3) 0; border-top: 1px solid var(--line); }
+.option dt { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.option dd { margin: 0; }
+.sticky { position: sticky; top: var(--s4); align-self: start; }
+nav a.spot { outline: 3px solid var(--brass); outline-offset: 2px; }
+progress { width: 100%; accent-color: var(--brass); }
+:root[data-density="compact"] main > * + * { margin-top: var(--s3); }
+:root[data-density="compact"] .card { padding: var(--s3); }
+@media (max-width: 760px) { .option { grid-template-columns: 1fr; } .sticky { position: static; } }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 960px) {
+  .split, .cols-2 { grid-template-columns: 1fr; }
+  .tiers-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  nav { max-width: 100%; overflow-x: auto; }
+  .rail { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: var(--s3); gap: var(--s3); }
+  nav ul { grid-auto-flow: column; overflow-x: auto; }
+  nav kbd, .rail-foot .muted-line { display: none; }
+  .rail-foot { margin: 0; }
+  .tiers-board { grid-template-columns: 1fr; }
+  .rung { grid-template-columns: auto 1fr auto; }
+  .rung .wide { grid-column: 2 / -1; }
+  main { padding: var(--s4); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fill { transition: width .4s ease; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+<div class="shell">
+  <aside class="rail">
+    <a class="brand" href="#/panel" aria-label="Timonel">
+      <svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+        <circle cx="32" cy="32" r="17"/><circle cx="32" cy="32" r="5"/>
+        <path d="M32 3v12M32 49v12M3 32h12M49 32h12M11.5 11.5l8.5 8.5M44 44l8.5 8.5M52.5 11.5L44 20M20 44l-8.5 8.5"/>
+      </svg>
+      <span><b>Timonel</b><small data-i18n="tagline">agent router</small></span>
+    </a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="#/panel" data-view="panel"><span data-i18n="nav.panel">Panel</span><kbd data-shortcut="panel">p</kbd></a></li>
+        <li><a href="#/new" data-view="new"><span data-i18n="nav.new">New task</span><kbd data-shortcut="new">n</kbd></a></li>
+        <li><a href="#/history" data-view="history"><span data-i18n="nav.history">History</span><kbd data-shortcut="history">h</kbd></a></li>
+        <li><a href="#/stats" data-view="stats"><span data-i18n="nav.stats">Statistics</span><kbd data-shortcut="stats">s</kbd></a></li>
+        <li><a href="#/routes" data-view="routes"><span data-i18n="nav.routes">Routes</span><kbd data-shortcut="routes">r</kbd></a></li>
+        <li><a href="#/setup" data-view="setup"><span data-i18n="nav.setup">Setup</span><kbd data-shortcut="setup">i</kbd></a></li>
+        <li><a href="#/settings" data-view="settings"><span data-i18n="nav.settings">Settings</span><kbd data-shortcut="settings">c</kbd></a></li>
+      </ul>
+    </nav>
+    <div class="rail-foot">
+      <div class="row">
+        <button type="button" class="ghost" id="theme-toggle"><span data-i18n="theme">Theme</span>: <span id="theme-label">auto</span></button>
+        <button type="button" class="ghost" id="lang-toggle" aria-label="Language">ES</button>
+        <button type="button" class="ghost" id="keys-open" aria-label="Keyboard shortcuts">?</button>
+        <button type="button" class="ghost" id="tour-open" data-i18n="tour.start">Tour</button>
+      </div>
+      <div class="muted-line" id="repo-line"></div>
+      <div class="muted-line">v{{VERSION}}</div>
+    </div>
+  </aside>
+  <main id="main" tabindex="-1" aria-live="polite"></main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog id="keys">
+  <h2 data-i18n="keys.title">Keyboard shortcuts</h2>
+  <dl class="keys">
+    <dt id="keys-views">p n h s r i c</dt><dd data-i18n="keys.nav">Panel, new task, history, statistics, routes, setup, settings</dd>
+    <dt>Ctrl+Enter</dt><dd data-i18n="keys.submit">Preview the plan, then launch</dd>
+    <dt>t</dt><dd data-i18n="keys.theme">Cycle theme</dd>
+    <dt>l</dt><dd data-i18n="keys.lang">Switch language</dd>
+    <dt>?</dt><dd data-i18n="keys.help">This help</dd>
+  </dl>
+  <p><button type="button" class="primary" id="keys-close" data-i18n="close">Close</button></p>
+</dialog>
+<dialog id="tour" aria-labelledby="tour-h">
+  <h2 id="tour-h"></h2>
+  <p></p>
+  <p class="toolbar"><button type="button" class="primary" data-next></button><button type="button" class="ghost" data-skip data-i18n="tour.skip">Skip</button></p>
+</dialog>
+<script nonce="{{NONCE}}">
+"use strict";
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+const I18N = {{I18N}};
+const SETTINGS = {{SETTINGS}};
+const LANGS = Object.keys(I18N);
+const store = {
+  get(key, fallback) { try { return localStorage.getItem(key) || fallback; } catch (_) { return fallback; } },
+  set(key, value) { try { localStorage.setItem(key, value); } catch (_) { } }
+};
+let lang = store.get("timonel.lang", SETTINGS.language || (navigator.language || "en").slice(0, 2).toLowerCase());
+if (!I18N[lang]) lang = "en";
+let theme = store.get("timonel.theme", SETTINGS.theme);
+let mode = SETTINGS.mode;
+const SHORTCUTS = SETTINGS.shortcuts;
+const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+let live = null;
+let draft = { task: "", profile: "balanced", race: false, decompose: false, plan: null };
+
+function h(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === "class") node.className = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else if (key === "text") node.textContent = value;
+    else node.setAttribute(key, value === true ? "" : String(value));
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+let routeSeq = 0;
+
+async function api(path, options = {}) {
+  const seq = routeSeq;
+  const init = { method: options.method || "GET", headers: { "Accept": "application/json" }, credentials: "same-origin" };
+  if (init.method !== "GET") {
+    init.headers["Content-Type"] = "application/json";
+    init.headers["X-CSRF-Token"] = CSRF;
+    init.body = JSON.stringify(options.body || {});
+  }
+  const response = await fetch(path, init);
+  const data = await response.json().catch(() => ({}));
+  if (init.method === "GET" && seq !== routeSeq) return new Promise(() => {});
+  if (!response.ok) {
+    const error = new Error(data.error || `${response.status}`);
+    error.details = data.details;
+    throw error;
+  }
+  return data;
+}
+
+function toast(message) {
+  const box = document.getElementById("toast");
+  box.textContent = message;
+  box.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { box.hidden = true; }, 4500);
+}
+
+function statusBadge(status) {
+  const tone = { succeeded: "b-ok", applied: "b-ok", failed: "b-bad", cancelled: "b-warn", interrupted: "b-warn", running: "b-info", planning: "b-info", discarded: "b-mute" }[status] || "b-mute";
+  return h("span", { class: `badge ${tone}` }, t(`status.${status}`));
+}
+
+const money = (value) => value === null || value === undefined ? "—" : `$${Number(value).toFixed(value < 1 ? 4 : 2)}`;
+const seconds = (value) => value === null || value === undefined ? "—" : `${Number(value).toFixed(value < 10 ? 2 : 1)} s`;
+const when = (ts) => new Date(ts * 1000).toLocaleString(lang, { dateStyle: "short", timeStyle: "short" });
+const firstLine = (text) => (text || "").split("\n")[0];
+
+function page(title, lede, ...body) {
+  const main = document.getElementById("main");
+  main.replaceChildren(...[h("h1", { text: title }), lede ? h("p", { class: "lede", text: lede }) : null, ...body].filter(Boolean));
+  document.title = `${title} · Timonel`;
+}
+
+function failure(error) {
+  page(t("error"), null, h("p", { class: "problems", text: String(error.message || error) }));
+}
+
+function runsTable(runs, emptyKey) {
+  if (!runs.length) return h("p", { class: "empty", text: t(emptyKey) });
+  const rows = runs.map((run) => h("tr", {
+    class: "clickable", tabindex: "0", "data-run": run.id,
+    onclick: () => { location.hash = `#/run/${run.id}`; },
+    onkeydown: (event) => { if (event.key === "Enter") location.hash = `#/run/${run.id}`; }
+  },
+    h("td", {}, h("span", { class: "tag", text: run.id })),
+    h("td", {}, statusBadge(run.status)),
+    h("td", { text: firstLine(run.task).slice(0, 90) }),
+    h("td", { text: run.profile }),
+    h("td", { class: "num", text: run.diff_stat || "" }),
+    h("td", { class: "num", text: when(run.created) })
+  ));
+  return h("div", { class: "card flat" }, h("table", {},
+    h("thead", {}, h("tr", {}, ...["col.id", "col.status", "col.task", "col.profile", "col.changes", "col.when"].map((key) => h("th", { scope: "col", text: t(key) })))),
+    h("tbody", {}, rows)));
+}
+
+async function viewPanel() {
+  const state = await api("/api/state");
+  const agents = state.agents.map((agent) => {
+    let badge;
+    if (!agent.installed) badge = h("span", { class: "badge b-mute" }, t("agent.missing"));
+    else if (agent.cooldown_until) badge = h("span", { class: "badge b-warn" }, t("panel.cooling"));
+    else if (agent.usable) badge = h("span", { class: "badge b-ok" }, t("panel.usable"));
+    else badge = h("span", { class: "badge b-bad" }, t("panel.unusable"));
+    return h("article", { class: "card agent", "aria-label": agent.name },
+      h("header", {}, h("b", { text: agent.name }), badge),
+      h("div", { class: "meta", text: agent.version || agent.command }),
+      h("div", { class: "meta", text: `${agent.billing} · ${agent.verified ? t("agent.verified") : t("agent.unverified")}` }),
+      h("div", { class: "meta", text: agent.auth_detail }),
+      agent.models && agent.models.length ? h("div", { class: "meta" }, agent.models.slice(0, 4).map((model) => h("span", { class: "tag", text: model })), " ") : null);
+  });
+  const refresh = h("button", { type: "button", onclick: async (event) => {
+    event.currentTarget.disabled = true;
+    await api("/api/doctor", { method: "POST" }).catch((error) => toast(error.message));
+    route();
+  } }, t("panel.refresh"));
+  page(t("panel.title"), t("panel.lede"),
+    h("div", { class: "grid cols-3" },
+      h("section", { class: "card", "aria-labelledby": "spend-h" }, h("h2", { class: "eyebrow", id: "spend-h", text: t("panel.spend") }), h("div", { class: "figure", text: money(state.spend_today_usd) })),
+      h("section", { class: "card", "aria-labelledby": "queue-h" }, h("h2", { class: "eyebrow", id: "queue-h", text: t("panel.queue") }), h("div", { class: "figure" }, String(state.active.length), " ", h("small", { text: state.active.map((run) => run.id).join(", ") || t("panel.none") })))
+    ),
+    h("section", { class: "stack", "aria-labelledby": "agents-h" },
+      h("div", { class: "toolbar" }, h("h2", { id: "agents-h", text: t("panel.agents") }), refresh),
+      h("div", { class: "grid cols-3" }, agents)),
+    h("section", { class: "stack", "aria-labelledby": "recent-h" }, h("h2", { id: "recent-h", text: t("panel.recent") }), runsTable(state.recent, "panel.none"))
+  );
+  document.getElementById("repo-line").textContent = state.repo;
+}
+
+function rungRow(step, ladder, agents, rerender) {
+  const index = ladder.indexOf(step);
+  const agentSelect = h("select", { "aria-label": "agent", onchange: (event) => { step.agent = event.target.value; step.billing = agents[step.agent].billing; rerender(); } },
+    Object.keys(agents).map((name) => h("option", { value: name, selected: name === step.agent }, name)));
+  const item = h("li", { class: "rung", draggable: "true" },
+    h("span", { class: "grip", "aria-hidden": "true", text: "⋮⋮" }),
+    agentSelect,
+    h("input", { type: "text", value: step.model || "", placeholder: "model", "aria-label": "model", oninput: (event) => { step.model = event.target.value; } }),
+    h("input", { type: "text", value: step.effort || "", placeholder: "effort", "aria-label": "effort", class: "wide", oninput: (event) => { step.effort = event.target.value; } }),
+    h("span", { class: "billing", text: step.billing }),
+    h("span", {},
+      h("button", { type: "button", class: "ghost", "aria-label": t("new.up"), disabled: index === 0, onclick: () => { ladder.splice(index, 1); ladder.splice(index - 1, 0, step); rerender(); } }, "↑"),
+      h("button", { type: "button", class: "ghost", "aria-label": t("new.down"), disabled: index === ladder.length - 1, onclick: () => { ladder.splice(index, 1); ladder.splice(index + 1, 0, step); rerender(); } }, "↓"),
+      h("button", { type: "button", class: "ghost", "aria-label": t("new.remove"), disabled: ladder.length === 1, onclick: () => { ladder.splice(index, 1); rerender(); } }, "✕")));
+  item.addEventListener("dragstart", (event) => { item.classList.add("dragging"); event.dataTransfer.setData("text/plain", String(index)); event.dataTransfer.effectAllowed = "move"; });
+  item.addEventListener("dragend", () => item.classList.remove("dragging"));
+  item.addEventListener("dragover", (event) => event.preventDefault());
+  item.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const from = Number(event.dataTransfer.getData("text/plain"));
+    if (Number.isNaN(from) || from === index) return;
+    const [moved] = ladder.splice(from, 1);
+    ladder.splice(index, 0, moved);
+    rerender();
+  });
+  return item;
+}
+
+async function viewNew() {
+  const routes = await api("/api/routes");
+  const state = await api("/api/state");
+  const taskBox = h("textarea", { id: "task", placeholder: t("new.placeholder"), "aria-describedby": "task-hint", oninput: (event) => { draft.task = event.target.value; draft.plan = null; planBox.replaceChildren(); launch.disabled = true; } });
+  taskBox.value = draft.task;
+  const planBox = h("div", { class: "stack", id: "plan" });
+  const launch = h("button", { type: "button", class: "brass", disabled: !draft.plan, onclick: launchRun }, t("new.launch"));
+  const preview = h("button", { type: "button", class: "primary", onclick: previewPlan }, t("new.preview"));
+  const profiles = h("div", { class: "seg", role: "radiogroup", "aria-label": t("new.profile") },
+    state.profiles.flatMap((name) => [
+      h("input", { type: "radio", name: "profile", id: `profile-${name}`, value: name, checked: draft.profile === name, onchange: () => { draft.profile = name; draft.plan = null; planBox.replaceChildren(); launch.disabled = true; } }),
+      h("label", { for: `profile-${name}`, text: name })]));
+  const race = h("input", { type: "checkbox", id: "race", checked: draft.race, onchange: (event) => { draft.race = event.target.checked; } });
+  const decompose = h("input", { type: "checkbox", id: "decompose", checked: draft.decompose, onchange: (event) => { draft.decompose = event.target.checked; } });
+
+  function renderPlan() {
+    const plan = draft.plan;
+    if (!plan) return;
+    const c = plan.classification;
+    const ladders = h("div", { class: "ladders" }, plan.ladders.map((ladder, position) =>
+      h("section", { class: "ladder", "aria-label": `${t("new.tier")} ${ladder[0].tier}` },
+        h("header", {}, h("b", { text: `${t("new.tier")} ${ladder[0].tier}` }), h("span", { class: "meta", text: position === 0 ? "start" : `escalation ${position}` })),
+        h("ol", { class: "rungs" }, ladder.map((step) => rungRow(step, ladder, routes.agents, renderPlan))),
+        h("div", { class: "toolbar" }, h("button", { type: "button", class: "ghost", onclick: () => { const first = Object.keys(routes.agents)[0]; ladder.push({ tier: ladder[0].tier, agent: first, model: "", effort: "", billing: routes.agents[first].billing, note: "" }); renderPlan(); } }, `+ ${t("new.add")}`)))));
+    planBox.replaceChildren(
+      h("section", { class: "card stack", "aria-labelledby": "class-h" },
+        h("h2", { class: "eyebrow", id: "class-h", text: t("new.classification") }),
+        h("div", { class: "toolbar" },
+          h("span", { class: "tag", text: `complexity ${c.complexity}` }), h("span", { class: "tag", text: c.kind }),
+          h("span", { class: "tag", text: `risk ${c.risk}` }), h("span", { class: "tag", text: c.needs_write ? t("new.write") : t("new.readonly") }),
+          h("span", { class: "meta", text: `${c.source}: ${c.reason}` })),
+        h("h2", { class: "eyebrow", text: t("new.reasons") }),
+        h("ul", { class: "reasons" }, plan.reasons.map((reason) => h("li", { text: reason })), plan.skipped.map((reason) => h("li", { class: "meta", text: reason })))),
+      h("section", { class: "stack", "aria-labelledby": "route-h" }, h("h2", { id: "route-h", text: t("new.route") }), h("p", { class: "hint", text: t("new.edit") }), ladders));
+  }
+
+  async function previewPlan() {
+    if (!draft.task.trim()) { taskBox.focus(); return; }
+    preview.disabled = true;
+    try {
+      draft.plan = await api("/api/plan", { method: "POST", body: { task: draft.task, profile: draft.profile } });
+      renderPlan();
+      launch.disabled = false;
+    } catch (error) { toast(error.message); }
+    preview.disabled = false;
+  }
+
+  async function launchRun() {
+    if (!draft.plan) return;
+    launch.disabled = true;
+    try {
+      const plan = { ...draft.plan, ladders: draft.plan.ladders.filter((ladder) => ladder.length) };
+      const result = await api("/api/runs", { method: "POST", body: { task: draft.task, profile: draft.profile, plan, race: draft.race, decompose: draft.decompose } });
+      draft = { task: "", profile: draft.profile, race: false, decompose: false, plan: null };
+      location.hash = `#/run/${result.run_id}`;
+    } catch (error) { toast(error.message); launch.disabled = false; }
+  }
+
+  taskBox.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); if (draft.plan) launchRun(); else previewPlan(); }
+  });
+  page(t("new.title"), t("new.lede"),
+    h("div", { class: "split" },
+      h("form", { class: "card stack", onsubmit: (event) => { event.preventDefault(); previewPlan(); } },
+        h("div", {}, h("label", { for: "task", text: t("new.task") }), taskBox, h("p", { class: "hint", id: "task-hint" }, h("kbd", { class: "k", text: "Ctrl" }), "+", h("kbd", { class: "k", text: "Enter" }))),
+        h("div", {}, h("span", { class: "visually-hidden", text: t("new.profile") }), profiles),
+        h("div", { class: "toolbar" }, h("label", { class: "check", for: "race" }, race, t("new.race")), h("label", { class: "check", for: "decompose" }, decompose, t("new.decompose"))),
+        h("div", { class: "toolbar" }, preview, launch)),
+      planBox));
+  renderPlan();
+  taskBox.focus();
+}
+
+function renderDiff(text) {
+  if (!text) return h("p", { class: "empty", text: t("run.nodiff") });
+  const lines = text.split("\n").slice(0, 4000).map((line) => {
+    let cls = "";
+    if (line.startsWith("diff --git")) cls = "file";
+    else if (line.startsWith("@@")) cls = "hunk";
+    else if (line.startsWith("+") && !line.startsWith("+++")) cls = "add";
+    else if (line.startsWith("-") && !line.startsWith("---")) cls = "del";
+    return h("span", { class: cls, text: line || " " });
+  });
+  return h("pre", { class: "diff", tabindex: "0", "aria-label": t("run.diff") }, lines);
+}
+
+function eventItem(event) {
+  const d = event.data;
+  const stamp = h("time", { text: new Date(event.ts * 1000).toLocaleTimeString(lang) });
+  const map = {
+    "plan": ["run", () => `plan: ${d.plan.ladders.map((l) => l.map((s) => `${s.agent}:${s.model || "default"}`).join(" → ")).join(" ⟶ ")}`],
+    "attempt.started": ["run", () => `${d.role} · tier ${d.tier} · ${d.agent}:${d.model} (${d.billing})`],
+    "attempt.finished": [d.outcome === "succeeded" ? "ok" : d.outcome === "rate_limited" ? "warn" : "bad", () => `${d.agent}: ${d.outcome} · ${seconds(d.duration_s)} · ${money(d.cost_usd)}${d.cost_estimated && d.cost_usd !== null ? " (est.)" : ""}${d.detail && d.outcome !== "succeeded" ? ` — ${d.detail.slice(0, 160)}` : ""}`],
+    "escalate": ["warn", () => `escalate → tier ${d.to_tier}`],
+    "cooldown": ["warn", () => `${d.agent} cooling down for ${d.minutes} min`],
+    "verify.started": ["run", () => `verify: ${d.command}`],
+    "verify.finished": [d.passed ? "ok" : "bad", () => `verify ${d.passed ? "passed" : "failed"}: ${d.command}`],
+    "review": [d.approve ? "ok" : "warn", () => `review: ${d.approve === null ? "no verdict" : d.approve ? "approved" : "rejected"}${d.issues && d.issues.length ? ` — ${d.issues.join("; ")}` : ""}`],
+    "race.started": ["run", () => `race: ${d.contenders.join(" vs ")}`],
+    "race.winner": ["ok", () => `race winner ${d.run} (diff ${d.diff_size} lines)`],
+    "decompose.plan": ["run", () => `subtasks: ${d.waves.map((wave) => wave.join(" + ")).join(" → ")}`],
+    "decompose.subtask": [d.merged ? "ok" : "bad", () => `subtask ${d.id} ${d.merged ? "merged" : "failed"}`],
+    "run.finished": [d.status === "succeeded" ? "ok" : "bad", () => `${t(`status.${d.status}`)}${d.diff_stat ? ` · ${d.diff_stat}` : ""}${d.error ? ` — ${d.error}` : ""}`]
+  };
+  const entry = map[event.kind];
+  if (!entry) return null;
+  return h("li", { class: entry[0] }, stamp, entry[1]());
+}
+
+async function viewRun(runId) {
+  const detail = await api(`/api/runs/${encodeURIComponent(runId)}`);
+  const timeline = h("ol", { class: "timeline", "aria-label": t("run.timeline") });
+  const output = h("pre", { class: "console", tabindex: "0", "aria-label": t("run.output"), "aria-live": "off" });
+  const diffBox = h("div", {});
+  const result = h("div", { class: "stack" });
+  const actions = h("div", { class: "toolbar" });
+  const header = h("div", { class: "toolbar" });
+
+  async function refresh() {
+    const current = await api(`/api/runs/${encodeURIComponent(runId)}`);
+    header.replaceChildren(...[statusBadge(current.status), h("span", { class: "tag", text: current.id }), current.branch ? h("span", { class: "tag", text: current.branch }) : null, h("span", { class: "meta", text: current.diff_stat || "" })].filter(Boolean));
+    result.replaceChildren(...[
+      current.summary ? h("pre", { class: "console", text: current.summary }) : null,
+      current.error ? h("p", { class: "problems", text: current.error }) : null].filter(Boolean));
+    actions.replaceChildren();
+    if (["running", "planning"].includes(current.status)) {
+      actions.append(h("button", { type: "button", class: "danger", onclick: () => act("cancel") }, t("run.cancel")));
+    }
+    if (current.status === "succeeded" && current.branch) {
+      actions.append(h("button", { type: "button", class: "brass", onclick: () => act("apply") }, t("run.apply")));
+    }
+    if (["succeeded", "failed", "cancelled", "interrupted"].includes(current.status)) {
+      actions.append(h("button", { type: "button", onclick: () => act("discard") }, t("run.discard")));
+    }
+    if (current.branch && !["applied", "discarded"].includes(current.status)) {
+      const diff = await api(`/api/runs/${encodeURIComponent(runId)}/diff`);
+      diffBox.replaceChildren(renderDiff(diff.diff));
+    } else diffBox.replaceChildren(renderDiff(""));
+  }
+
+  async function act(action) {
+    if (action !== "cancel" && !confirm(t(`run.confirm.${action}`))) return;
+    try { await api(`/api/runs/${encodeURIComponent(runId)}/${action}`, { method: "POST" }); toast(`${action}: ok`); }
+    catch (error) { toast(error.message); }
+    refresh();
+  }
+
+  page(`${t("run.title")} ${detail.id}`, firstLine(detail.task),
+    header,
+    h("div", { class: "split" },
+      h("section", { class: "card stack", "aria-labelledby": "tl-h" }, h("h2", { id: "tl-h", text: t("run.timeline") }), timeline),
+      h("section", { class: "stack", "aria-labelledby": "out-h" }, h("h2", { id: "out-h", text: t("run.output") }), output,
+        h("h2", { text: t("run.result") }), result, actions)),
+    h("section", { class: "stack", "aria-labelledby": "diff-h" }, h("h2", { id: "diff-h", text: t("run.diff") }), diffBox));
+  await refresh();
+  if (live) live.close();
+  live = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
+  const handle = (message) => {
+    const event = JSON.parse(message.data);
+    if (event.kind === "output") {
+      output.append(document.createTextNode(event.data.text));
+      if (output.textContent.length > 200000) output.textContent = output.textContent.slice(-150000);
+      output.scrollTop = output.scrollHeight;
+      return;
+    }
+    const item = eventItem(event);
+    if (item) timeline.append(item);
+    if (["run.finished", "run.applied", "run.discarded", "attempt.finished"].includes(event.kind)) refresh();
+  };
+  ["plan", "output", "attempt.started", "attempt.finished", "escalate", "cooldown", "verify.started", "verify.finished", "review", "race.started", "race.winner", "decompose.plan", "decompose.subtask", "run.finished"]
+    .forEach((kind) => live.addEventListener(kind, handle));
+  live.addEventListener("end", () => { live.close(); live = null; refresh(); });
+}
+
+async function viewHistory() {
+  const search = h("input", { type: "search", id: "search", placeholder: t("history.search"), "aria-label": t("history.search") });
+  const status = h("select", { id: "status", "aria-label": t("history.status") },
+    h("option", { value: "" }, t("history.all")),
+    ["succeeded", "failed", "running", "cancelled", "applied", "discarded", "interrupted"].map((name) => h("option", { value: name }, t(`status.${name}`))));
+  const holder = h("div", {});
+  async function load() {
+    const params = new URLSearchParams({ q: search.value, status: status.value });
+    holder.replaceChildren(runsTable(await api(`/api/runs?${params}`), "history.empty"));
+  }
+  search.addEventListener("input", () => { clearTimeout(load.timer); load.timer = setTimeout(load, 200); });
+  status.addEventListener("change", load);
+  page(t("history.title"), t("history.lede"), h("div", { class: "toolbar" }, h("div", {}, search), h("div", {}, status)), holder);
+  await load();
+}
+
+function barChart(title, groups, value, format) {
+  const max = Math.max(...groups.map(value), 0) || 1;
+  return h("section", { class: "card stack", "aria-label": title }, h("h2", { class: "eyebrow", text: title }),
+    groups.length ? h("div", { class: "bars", role: "list" }, groups.map((group) => {
+      const fill = h("div", { class: "fill" });
+      fill.style.width = `${Math.round((value(group) / max) * 100)}%`;
+      return h("div", { class: "bar", role: "listitem", "aria-label": `${group.key}: ${format(group)}` },
+        h("span", { class: "name", text: group.key }), h("div", { class: "track", "aria-hidden": "true" }, fill), h("span", { class: "val", text: format(group) }));
+    })) : h("p", { class: "empty", text: t("stats.empty") }));
+}
+
+async function viewStats() {
+  const stats = await api("/api/stats");
+  const saving = stats.savings;
+  const savingCard = h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("stats.savings") }),
+    saving.saved_usd === null
+      ? h("p", { class: "meta", text: `${t("stats.nosavings")} (${saving.baseline_source})` })
+      : h("div", {}, h("div", { class: "figure", text: money(saving.saved_usd) }), h("p", { class: "meta", text: `${t("stats.saved")} · ${saving.runs} runs · ${money(saving.actual_usd)} vs ${money(saving.baseline_usd)}` })));
+  const table = (groups) => h("div", { class: "card flat" }, h("table", {},
+    h("thead", {}, h("tr", {}, ["col.agent", "col.attempts", "col.success", "col.cost", "col.latency"].map((key) => h("th", { scope: "col", text: t(key) })))),
+    h("tbody", {}, groups.map((group) => h("tr", {}, h("td", { text: group.key }), h("td", { class: "num", text: group.attempts }), h("td", { class: "num", text: `${Math.round(group.success_rate * 100)}%` }), h("td", { class: "num", text: `${money(group.cost_usd)} (${group.cost_known} ${t("stats.known")})` }), h("td", { class: "num", text: seconds(group.mean_duration_s) }))))));
+  page(t("stats.title"), t("stats.lede"),
+    h("div", { class: "grid cols-3" }, savingCard, h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("panel.spend") }), h("div", { class: "figure", text: money(stats.spend_today_usd) }))),
+    h("div", { class: "grid cols-2" },
+      barChart(t("stats.success"), stats.by_agent, (g) => g.success_rate, (g) => `${Math.round(g.success_rate * 100)}%`),
+      barChart(t("stats.cost"), stats.by_agent, (g) => g.cost_usd, (g) => money(g.cost_usd)),
+      barChart(t("stats.latency"), stats.by_agent, (g) => g.mean_duration_s || 0, (g) => seconds(g.mean_duration_s)),
+      barChart(t("stats.tier"), stats.by_tier.map((g) => ({ ...g, key: `tier ${g.key}` })), (g) => g.success_rate, (g) => `${Math.round(g.success_rate * 100)}%`)),
+    h("h2", { text: t("col.agent") }), table(stats.by_agent));
+}
+
+async function viewRoutes() {
+  const routes = await api("/api/routes");
+  const tiers = {};
+  for (const tier of ["1", "2", "3", "4"]) tiers[tier] = (routes.tiers[tier] || []).map((rung) => ({ ...rung }));
+  const board = h("div", { class: "tiers-board" });
+  const feedback = h("div", { "aria-live": "polite" });
+  let dragging = null;
+
+  function render() {
+    board.replaceChildren(...Object.entries(tiers).map(([tier, rungs]) => {
+      const list = h("ol", { class: "rungs", "data-tier": tier, "aria-label": `${t("new.tier")} ${tier}` }, rungs.map((rung, index) => {
+        const item = h("li", { class: "rung", draggable: "true" },
+          h("span", { class: "grip", "aria-hidden": "true", text: "⋮⋮" }),
+          h("div", { class: "fields" },
+            h("select", { "aria-label": "agent", onchange: (event) => { rung.agent = event.target.value; render(); } }, Object.keys(routes.agents).map((name) => h("option", { value: name, selected: name === rung.agent }, name))),
+            h("input", { type: "text", value: rung.model, placeholder: "model", "aria-label": "model", oninput: (event) => { rung.model = event.target.value; } }),
+            h("input", { type: "text", value: rung.effort, placeholder: "effort", "aria-label": "effort", oninput: (event) => { rung.effort = event.target.value; } }),
+            h("span", { class: "billing", text: (routes.agents[rung.agent] || {}).billing || "" })),
+          h("span", {},
+            h("button", { type: "button", class: "ghost", "aria-label": t("new.up"), disabled: index === 0, onclick: () => { rungs.splice(index, 1); rungs.splice(index - 1, 0, rung); render(); } }, "↑"),
+            h("button", { type: "button", class: "ghost", "aria-label": t("new.down"), disabled: index === rungs.length - 1, onclick: () => { rungs.splice(index, 1); rungs.splice(index + 1, 0, rung); render(); } }, "↓"),
+            h("button", { type: "button", class: "ghost", "aria-label": t("new.remove"), onclick: () => { rungs.splice(index, 1); render(); } }, "✕")));
+        item.addEventListener("dragstart", (event) => { dragging = { tier, index }; item.classList.add("dragging"); event.dataTransfer.setData("text/plain", `${tier}:${index}`); });
+        item.addEventListener("dragend", () => { item.classList.remove("dragging"); });
+        item.addEventListener("drop", (event) => { event.preventDefault(); event.stopPropagation(); move(tier, index); });
+        item.addEventListener("dragover", (event) => event.preventDefault());
+        return item;
+      }));
+      list.addEventListener("dragover", (event) => { event.preventDefault(); list.classList.add("over"); });
+      list.addEventListener("dragleave", () => list.classList.remove("over"));
+      list.addEventListener("drop", (event) => { event.preventDefault(); list.classList.remove("over"); move(tier, rungs.length); });
+      return h("section", { class: "ladder" },
+        h("header", {}, h("b", { text: `${t("new.tier")} ${tier}` }), h("button", { type: "button", class: "ghost", "aria-label": `${t("new.add")} ${tier}`, onclick: () => { rungs.push({ agent: Object.keys(routes.agents)[0], model: "", effort: "" }); render(); } }, "+")),
+        list);
+    }));
+  }
+
+  function move(tier, index) {
+    if (!dragging) return;
+    const [rung] = tiers[dragging.tier].splice(dragging.index, 1);
+    const target = tiers[tier];
+    const position = dragging.tier === tier && dragging.index < index ? index - 1 : index;
+    target.splice(Math.min(position, target.length), 0, rung);
+    dragging = null;
+    render();
+  }
+
+  async function save() {
+    feedback.replaceChildren();
+    try {
+      const result = await api("/api/routes", { method: "PUT", body: { tiers } });
+      feedback.replaceChildren(h("p", { class: "badge b-ok", text: `${t("routes.saved")}: ${result.saved}` }), h("pre", { class: "console", text: result.yaml }));
+    } catch (error) {
+      feedback.replaceChildren(h("div", { class: "problems", role: "alert", text: [error.message, ...(error.details || [])].join("\n") }));
+    }
+  }
+
+  page(t("routes.title"), t("routes.lede"),
+    h("p", { class: "meta", text: `${t("routes.file")}: ${routes.path}` }),
+    board,
+    h("div", { class: "toolbar" }, h("button", { type: "button", class: "primary", onclick: save }, t("routes.save")), h("button", { type: "button", onclick: () => route() }, t("routes.reset"))),
+    feedback);
+  render();
+}
+
+const AUTH_TONE = { ok: "b-ok", missing: "b-warn", unknown: "b-mute" };
+
+function copyButton(text) {
+  return h("button", { type: "button", class: "ghost", "aria-label": `${t("setup.copy")}: ${text}`, onclick: async () => {
+    try { await navigator.clipboard.writeText(text); toast(t("setup.copied")); } catch (_) { toast(text); }
+  } }, t("setup.copy"));
+}
+
+function commandLine(text) {
+  return h("div", { class: "cmd" }, h("code", { text }), copyButton(text));
+}
+
+async function installAction(item, output) {
+  output.replaceChildren(h("p", { class: "meta", text: t("loading") }));
+  try {
+    const preview = await api("/api/setup/install", { method: "POST", body: { key: item.key } });
+    if (preview.status === "terminal") {
+      output.replaceChildren(h("p", { class: "hint", text: preview.manual ? t("setup.manual") : t("setup.terminal") }),
+        preview.manual ? h("p", {}, h("a", { href: preview.manual, rel: "noopener noreferrer", target: "_blank", text: preview.manual })) : commandLine(preview.command));
+      return;
+    }
+    const size = preview.size_mb ? ` (~${preview.size_mb} MB)` : "";
+    if (!confirm(`${t("setup.confirm")}\n\n${preview.command}${size}`)) { output.replaceChildren(); return; }
+    output.replaceChildren(h("p", { class: "meta", role: "status", text: t("setup.installing") }));
+    const result = await api("/api/setup/install", { method: "POST", body: { key: item.key, confirm: true } });
+    output.replaceChildren(
+      h("p", { class: `badge ${result.status === "installed" ? "b-ok" : "b-warn"}`, text: `${t("setup.result")}: ${result.status}` }),
+      result.undo ? h("p", { class: "hint", text: `${t("setup.undo")}: ${result.undo}` }) : null,
+      h("pre", { class: "console", text: (result.lines || []).join("\n") }));
+  } catch (error) {
+    output.replaceChildren(h("div", { class: "problems", role: "alert", text: error.message }));
+  }
+}
+
+function setupItem(item) {
+  const output = h("div", { "aria-live": "polite" });
+  let badge;
+  if (!item.installed) badge = h("span", { class: "badge b-mute", text: t("agent.missing") });
+  else if (item.auth === "key") badge = h("span", { class: "badge b-warn", text: t("setup.key_needed") });
+  else if (item.auth && item.auth !== "ok") badge = h("span", { class: `badge ${AUTH_TONE[item.auth] || "b-warn"}`, text: t("setup.login_needed") });
+  else badge = h("span", { class: "badge b-ok", text: t("setup.ready") });
+  const actions = h("div", { class: "toolbar" });
+  if (!item.installed) actions.append(h("button", { type: "button", class: "primary", onclick: () => installAction(item, output) }, t("setup.install")));
+  if (item.installed && item.login && item.auth !== "ok") {
+    actions.append(h("button", { type: "button", onclick: () => output.replaceChildren(h("p", { class: "hint", text: t("setup.login_hint") }), commandLine(item.login)) }, t("setup.login")));
+  }
+  if (item.key_env && !item.key_present) {
+    actions.append(h("button", { type: "button", onclick: () => output.replaceChildren(h("p", { class: "hint", text: t("setup.key_hint") }), commandLine(`timonel keys set ${item.key_env}`)) }, t("setup.key")));
+  }
+  return h("li", { class: "card setup-item", "data-key": item.key },
+    h("header", { class: "toolbar" }, h("b", { text: item.title }), badge, item.enabled ? null : h("span", { class: "tag", text: t("setup.disabled") })),
+    h("p", { class: "meta", text: item.what }),
+    item.install.command && !item.installed ? h("p", { class: "meta" }, `${t("setup.command")}: `, h("code", { text: item.install.command })) : null,
+    actions, output);
+}
+
+async function viewSetup() {
+  const data = await api("/api/setup");
+  const groups = [["tool", "setup.tools"], ["agent", "setup.agents"], ["provider", "setup.providers"]];
+  const shown = (item) => item.kind === "tool" || item.enabled || mode === "expert";
+  const done = data.items.filter((item) => shown(item) && item.installed && (!item.auth || item.auth === "ok")).length;
+  const total = data.items.filter(shown).length;
+  page(t("setup.title"), t("setup.lede"),
+    h("div", { class: "grid cols-3" },
+      h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("setup.progress") }), h("div", { class: "figure", text: `${done} / ${total}` }),
+        h("progress", { max: String(total), value: String(done), "aria-label": t("setup.progress") })),
+      h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("setup.system") }), h("p", { class: "meta", text: `${data.os} · ${data.managers.join(", ") || "—"}` }), h("p", { class: "meta", text: `${t("setup.keyring")}: ${data.keyring || "—"}` })),
+      h("section", { class: "card" }, h("h2", { class: "eyebrow", text: t("setup.project") }),
+        h("p", { class: "meta", text: data.project.path || t("setup.no_project") }),
+        data.project.path && !data.project.trusted ? commandLine("timonel trust") : null)),
+    h("p", { class: "hint", text: t("setup.privacy") }),
+    ...groups.map(([kind, title]) => {
+      const items = data.items.filter((item) => item.kind === kind && shown(item));
+      return items.length ? h("section", { class: "stack", "aria-labelledby": `setup-${kind}` },
+        h("h2", { id: `setup-${kind}`, text: t(title) }), h("ul", { class: "grid cols-2 plain" }, items.map(setupItem))) : null;
+    }),
+    h("p", { class: "hint" }, t("setup.cli_hint"), " ", h("code", { text: "timonel start" })));
+}
+
+const AREAS = ["general", "routing", "agents", "classifier", "review", "escalation", "verification", "execution", "budgets", "privacy", "ui", "notifications", "hooks", "paths"];
+
+function optionInput(option, current, onchange) {
+  const id = `opt-${option.key.replace(/[^a-z0-9]/gi, "-")}`;
+  const common = { id, "aria-describedby": `${id}-d` };
+  if (option.type === "boolean") return h("input", { ...common, type: "checkbox", checked: current === true, onchange: (event) => onchange(event.target.checked) });
+  if (option.enum) return h("select", { ...common, onchange: (event) => onchange(event.target.value) }, option.enum.map((value) => h("option", { value, selected: value === current }, String(value))));
+  if (option.type === "integer" || option.type === "number") {
+    return h("input", { ...common, type: "number", value: current ?? "", min: option.minimum ?? null, max: option.maximum ?? null, step: option.type === "integer" ? "1" : "any",
+      onchange: (event) => onchange(event.target.value === "" ? undefined : Number(event.target.value)) });
+  }
+  if (option.type === "array" && (option.items === "string" || !option.items)) {
+    return h("textarea", { ...common, rows: "3", oninput: (event) => onchange(event.target.value.split("\n").map((line) => line.trim()).filter(Boolean)) }, Array.isArray(current) ? current.join("\n") : "");
+  }
+  if (option.type === "string") return h("input", { ...common, type: "text", value: current ?? "", oninput: (event) => onchange(event.target.value) });
+  return h("p", { class: "meta" }, t("settings.yaml_only"), " ", h("code", { text: JSON.stringify(current ?? null).slice(0, 80) }));
+}
+
+function setPath(target, path, value) {
+  const keys = path.split(".");
+  let node = target;
+  for (const key of keys.slice(0, -1)) {
+    if (typeof node[key] !== "object" || node[key] === null || Array.isArray(node[key])) node[key] = {};
+    node = node[key];
+  }
+  if (value !== undefined) { node[keys[keys.length - 1]] = value; return; }
+  delete node[keys[keys.length - 1]];
+  for (let depth = keys.length - 1; depth > 0; depth -= 1) {
+    const parent = keys.slice(0, depth - 1).reduce((current, key) => current[key], target);
+    if (Object.keys(parent[keys[depth - 1]]).length) break;
+    delete parent[keys[depth - 1]];
+  }
+}
+
+function getPath(target, path) {
+  return path.split(".").reduce((node, key) => (node && typeof node === "object" ? node[key] : undefined), target);
+}
+
+async function viewSettings() {
+  const data = await api("/api/config");
+  let user = JSON.parse(JSON.stringify(data.user || {}));
+  let filter = "";
+  let area = "all";
+  let advanced = mode === "expert";
+  const list = h("div", { class: "stack" });
+  const preview = h("pre", { class: "console", "aria-label": t("settings.preview") });
+  const problems = h("div", { "aria-live": "polite" });
+  let timer = null;
+
+  async function check() {
+    try {
+      const result = await api("/api/config/validate", { method: "POST", body: { values: user } });
+      preview.textContent = result.yaml;
+      problems.replaceChildren(result.problems.length ? h("div", { class: "problems", role: "alert", text: result.problems.join("\n") }) : h("p", { class: "badge b-ok", text: t("settings.valid") }));
+    } catch (error) { problems.replaceChildren(h("div", { class: "problems", role: "alert", text: error.message })); }
+  }
+
+  function changed() { clearTimeout(timer); timer = setTimeout(check, 250); render(); }
+
+  function render() {
+    const words = filter.toLowerCase();
+    const visible = data.options.filter((option) => (advanced || !option.advanced) && (area === "all" || option.area === area) &&
+      (!words || option.key.toLowerCase().includes(words) || (option.description[lang] || "").toLowerCase().includes(words)));
+    const byArea = {};
+    for (const option of visible) (byArea[option.area] = byArea[option.area] || []).push(option);
+    list.replaceChildren(...(visible.length ? Object.entries(byArea).map(([name, options]) => h("section", { class: "card flat", "aria-labelledby": `area-${name}` },
+      h("h2", { id: `area-${name}`, text: t(`settings.area.${name}`) }),
+      h("dl", { class: "options" }, options.map((option) => {
+        const own = getPath(user, option.key);
+        const current = own !== undefined ? own : option.value;
+        const id = `opt-${option.key.replace(/[^a-z0-9]/gi, "-")}`;
+        return h("div", { class: "option", "data-key": option.key },
+          h("dt", {}, h("label", { for: id }, h("code", { text: option.key })),
+            own !== undefined ? h("span", { class: "badge b-info", text: t("settings.modified") }) : null,
+            option.origin !== "default" && own === undefined ? h("span", { class: "tag", text: `${t("settings.layer")}: ${option.origin}` }) : null,
+            option.advanced ? h("span", { class: "tag", text: t("settings.advanced_tag") }) : null),
+          h("dd", {}, optionInput(option, current, (value) => { setPath(user, option.key, value); changed(); }),
+            h("p", { class: "hint", id: `${id}-d`, text: option.description[lang] || option.description.en }),
+            own !== undefined ? h("button", { type: "button", class: "ghost", onclick: () => { setPath(user, option.key, undefined); changed(); } }, t("settings.reset_one")) : null));
+      })))) : [h("p", { class: "empty", text: t("settings.none") })]));
+  }
+
+  async function save() {
+    try {
+      const result = await api("/api/config", { method: "PUT", body: { values: user } });
+      toast(`${t("routes.saved")}: ${result.saved}`);
+      data.options = result.options;
+      user = JSON.parse(JSON.stringify(result.user || {}));
+      render();
+      check();
+    } catch (error) { problems.replaceChildren(h("div", { class: "problems", role: "alert", text: [error.message, ...(error.details || [])].join("\n") })); }
+  }
+
+  async function importYaml() {
+    const text = prompt(t("settings.import_prompt"));
+    if (!text) return;
+    try {
+      const result = await api("/api/config/validate", { method: "POST", body: { yaml: text } });
+      if (result.problems.length) { problems.replaceChildren(h("div", { class: "problems", role: "alert", text: result.problems.join("\n") })); return; }
+      if (!confirm(t("settings.import_confirm"))) return;
+      await api("/api/config", { method: "PUT", body: { yaml: text } });
+      route();
+    } catch (error) { problems.replaceChildren(h("div", { class: "problems", role: "alert", text: error.message })); }
+  }
+
+  function exportYaml() {
+    const link = h("a", { href: URL.createObjectURL(new Blob([preview.textContent], { type: "text/yaml" })), download: "timonel.yaml" });
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }
+
+  page(t("settings.title"), t("settings.lede"),
+    h("p", { class: "meta", text: `${t("routes.file")}: ${data.path}` }),
+    h("div", { class: "toolbar" },
+      h("label", { class: "visually-hidden", for: "settings-search", text: t("settings.search") }),
+      h("input", { id: "settings-search", type: "search", placeholder: t("settings.search"), oninput: (event) => { filter = event.target.value; render(); } }),
+      h("label", { class: "visually-hidden", for: "settings-area", text: t("settings.area_label") }),
+      h("select", { id: "settings-area", onchange: (event) => { area = event.target.value; render(); } },
+        h("option", { value: "all", text: t("settings.all") }), AREAS.map((name) => h("option", { value: name, text: t(`settings.area.${name}`) }))),
+      h("label", { class: "check" }, h("input", { type: "checkbox", checked: advanced, onchange: (event) => { advanced = event.target.checked; render(); } }), t("settings.show_advanced"))),
+    h("div", { class: "split" }, list,
+      h("aside", { class: "stack sticky" }, h("h2", { text: t("settings.preview") }), preview, problems,
+        h("div", { class: "toolbar" },
+          h("button", { type: "button", class: "primary", onclick: save }, t("routes.save")),
+          h("button", { type: "button", onclick: exportYaml }, t("settings.export")),
+          h("button", { type: "button", onclick: importYaml }, t("settings.import")),
+          h("button", { type: "button", class: "danger", onclick: () => { if (confirm(t("settings.reset_confirm"))) { user = {}; changed(); } } }, t("settings.reset_all"))))));
+  render();
+  check();
+}
+
+const TOUR = ["panel", "new", "routes", "setup", "settings"];
+
+function startTour() {
+  const box = document.getElementById("tour");
+  let index = 0;
+  function show() {
+    const step = TOUR[index];
+    document.querySelectorAll("nav a").forEach((link) => link.classList.toggle("spot", link.dataset.view === step));
+    box.querySelector("h2").textContent = `${index + 1}/${TOUR.length} · ${t(`nav.${step}`)}`;
+    box.querySelector("p").textContent = t(`tour.${step}`);
+    box.querySelector("[data-next]").textContent = index === TOUR.length - 1 ? t("tour.done") : t("tour.next");
+  }
+  function end() {
+    document.querySelectorAll("nav a.spot").forEach((link) => link.classList.remove("spot"));
+    store.set("timonel.tour", "done");
+    box.close();
+  }
+  box.querySelector("[data-next]").onclick = () => { if (index === TOUR.length - 1) end(); else { index += 1; show(); } };
+  box.querySelector("[data-skip]").onclick = end;
+  box.addEventListener("cancel", end, { once: true });
+  show();
+  box.showModal();
+}
+
+function applyChrome() {
+  document.documentElement.lang = lang;
+  document.documentElement.dataset.density = SETTINGS.density;
+  document.querySelectorAll("[data-shortcut]").forEach((node) => { node.textContent = SHORTCUTS[node.dataset.shortcut]; });
+  document.getElementById("keys-views").textContent = ["panel", "new", "history", "stats", "routes", "setup", "settings"].map((name) => SHORTCUTS[name]).join(" ");
+  if (theme === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", theme);
+  document.getElementById("theme-label").textContent = theme;
+  const next = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
+  document.getElementById("lang-toggle").textContent = next.toUpperCase();
+  document.getElementById("lang-toggle").setAttribute("aria-label", I18N[next]["lang.switch"]);
+  document.querySelectorAll("[data-i18n]").forEach((node) => { node.textContent = t(node.dataset.i18n); });
+}
+
+async function route() {
+  routeSeq += 1;
+  if (live && !location.hash.startsWith("#/run/")) { live.close(); live = null; }
+  const [, view, arg] = (location.hash || "#/panel").split("/");
+  document.querySelectorAll("nav a").forEach((link) => {
+    if (link.dataset.view === view) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+  });
+  page(t("loading"), null);
+  try {
+    if (view === "new") await viewNew();
+    else if (view === "run" && arg) await viewRun(arg);
+    else if (view === "history") await viewHistory();
+    else if (view === "stats") await viewStats();
+    else if (view === "routes") await viewRoutes();
+    else if (view === "setup") await viewSetup();
+    else if (view === "settings") await viewSettings();
+    else await viewPanel();
+  } catch (error) { failure(error); }
+}
+
+document.getElementById("theme-toggle").addEventListener("click", () => {
+  theme = { auto: "light", light: "dark", dark: "auto" }[theme];
+  store.set("timonel.theme", theme);
+  applyChrome();
+});
+document.getElementById("lang-toggle").addEventListener("click", () => {
+  lang = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
+  store.set("timonel.lang", lang);
+  applyChrome();
+  route();
+});
+const keys = document.getElementById("keys");
+document.getElementById("keys-open").addEventListener("click", () => keys.showModal());
+document.getElementById("keys-close").addEventListener("click", () => keys.close());
+document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+    if (event.key === "Escape") target.blur();
+    return;
+  }
+  const views = Object.fromEntries(["panel", "new", "history", "stats", "routes", "setup", "settings"].map((name) => [SHORTCUTS[name], `#/${name}`]));
+  if (views[event.key]) { location.hash = views[event.key]; event.preventDefault(); }
+  else if (event.key === SHORTCUTS.theme) document.getElementById("theme-toggle").click();
+  else if (event.key === SHORTCUTS.language) document.getElementById("lang-toggle").click();
+  else if (event.key === "?") keys.showModal();
+});
+window.addEventListener("hashchange", () => { route(); document.getElementById("main").focus({ preventScroll: true }); });
+document.getElementById("tour-open").addEventListener("click", startTour);
+applyChrome();
+route();
+if (SETTINGS.tour && store.get("timonel.tour", "") !== "done") startTour();
+</script>
+</body>
+</html>

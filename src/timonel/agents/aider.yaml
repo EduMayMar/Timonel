@@ -1,0 +1,25 @@
+name: aider
+kind: agent
+title: Aider
+vendor: Aider
+homepage: https://aider.chat
+verification: {status: verified, version: 0.86.2, date: "2026-11-03", source: "aider --help"}
+install:
+  pipx: ["pipx", "install", "aider-chat"]
+  uv: ["uv", "tool", "install", "--python", "3.12", "aider-chat"]
+  uninstall: {pipx: ["pipx", "uninstall", "aider-chat"], uv: ["uv", "tool", "uninstall", "aider-chat"]}
+  drift: {pypi: "aider-chat", help: [["--help"]]}
+agent:
+  enabled: false
+  command: aider
+  billing: api
+  parser: text
+  prompt_via: file
+  base_args: ["--no-auto-commits", "--no-check-update", "--no-analytics", "--no-pretty", "--no-stream", "--no-show-release-notes"]
+  read_args: ["--dry-run"]
+  write_args: []
+  model_args: ["--model", "{model}"]
+  effort_args: ["--reasoning-effort", "{effort}"]
+  prompt_args: ["--message-file", "{prompt_file}"]
+  dangerous_args: ["--yes-always"]
+  detect: {version: ["--version"]}

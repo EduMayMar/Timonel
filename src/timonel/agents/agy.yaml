@@ -1,0 +1,21 @@
+name: agy
+kind: agent
+title: Google Antigravity CLI
+vendor: Google
+homepage: https://antigravity.google
+verification: {status: unverified, date: "2026-11-03", source: "github.com/google-antigravity/antigravity-cli issue 318 and third-party cheat sheets"}
+login: {command: ["agy"], flow: browser}
+agent:
+  command: agy
+  billing: subscription
+  parser: text
+  prompt_via: arg
+  pty: true
+  base_args: ["--print-timeout", "{timeout_s}s"]
+  read_args: ["--mode", "plan"]
+  write_args: ["--mode", "accept-edits"]
+  model_args: ["--model", "{model}"]
+  prompt_args: ["-p", "{prompt}"]
+  dangerous_args: ["--dangerously-skip-permissions"]
+  models_command: ["models"]
+  detect: {version: ["--version"], auth: ["models"]}

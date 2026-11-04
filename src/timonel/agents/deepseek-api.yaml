@@ -1,0 +1,9 @@
+name: deepseek-api
+kind: provider
+title: DeepSeek API
+vendor: DeepSeek
+homepage: "https://api.deepseek.com"
+verification: {status: unverified, date: "2026-11-03", source: "base URL from third-party integration guides; check the provider's documentation"}
+api_key: {env: DEEPSEEK_API_KEY}
+provider: {api: openai, base_url: "https://api.deepseek.com", key_env: DEEPSEEK_API_KEY}
+agent: {command: deepseek-api, billing: api, parser: text}

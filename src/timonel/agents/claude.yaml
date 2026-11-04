@@ -1,0 +1,28 @@
+name: claude
+kind: agent
+title: Claude Code
+vendor: Anthropic
+homepage: https://code.claude.com/docs
+verification: {status: verified, version: 2.1.317, date: "2026-11-03", source: "claude --help; code.claude.com/docs/en/headless"}
+install:
+  approx_size_mb: 300
+  npm: ["npm", "install", "-g", "@anthropic-ai/claude-code"]
+  pnpm: ["pnpm", "add", "-g", "@anthropic-ai/claude-code"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@anthropic-ai/claude-code"], pnpm: ["pnpm", "remove", "-g", "@anthropic-ai/claude-code"]}
+  drift: {npm: "@anthropic-ai/claude-code", help: [["--help"]]}
+login: {command: ["claude", "auth", "login"], flow: browser}
+agent:
+  env_pass: [ANTHROPIC_API_KEY]
+  command: claude
+  billing: subscription
+  parser: json
+  prompt_via: stdin
+  base_args: ["-p", "--output-format", "json", "--permission-prompts", "none", "--no-session-persistence"]
+  read_args: ["--permission-mode", "plan"]
+  write_args: ["--permission-mode", "acceptEdits"]
+  model_args: ["--model", "{model}"]
+  effort_args: ["--effort", "{effort}"]
+  dangerous_args: ["--dangerously-skip-permissions"]
+  known_models: [fable, opus, sonnet]
+  detect: {version: ["--version"], auth: ["auth", "status"], auth_ok_pattern: '"loggedIn":\s*true'}
+  rate_limit_patterns: ["usage limit", "rate_limit", "Claude AI usage limit reached"]

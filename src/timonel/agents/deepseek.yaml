@@ -1,0 +1,26 @@
+name: deepseek
+kind: agent
+title: DeepSeek through Claude Code
+vendor: DeepSeek
+homepage: https://api-docs.deepseek.com/guides/anthropic_api
+verification: {status: docs, version: 2.1.317, date: "2026-11-03", source: "claude --help; api-docs.deepseek.com Claude Code guide (endpoint not exercised)"}
+install:
+  approx_size_mb: 300
+  npm: ["npm", "install", "-g", "@anthropic-ai/claude-code"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@anthropic-ai/claude-code"]}
+api_key: {env: DEEPSEEK_API_KEY, url: "https://platform.deepseek.com/api_keys"}
+agent:
+  command: claude
+  billing: api
+  parser: json
+  prompt_via: stdin
+  base_args: ["-p", "--output-format", "json", "--permission-prompts", "none", "--no-session-persistence"]
+  read_args: ["--permission-mode", "plan"]
+  write_args: ["--permission-mode", "acceptEdits"]
+  model_args: ["--model", "{model}"]
+  env: {ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic"}
+  env_from: {ANTHROPIC_AUTH_TOKEN: DEEPSEEK_API_KEY}
+  env_remove: [ANTHROPIC_API_KEY]
+  known_models: [deepseek-flash, deepseek-v4-pro]
+  detect: {version: ["--version"], auth_env: [DEEPSEEK_API_KEY]}
+  rate_limit_patterns: ["Insufficient Balance", "\\b402\\b"]

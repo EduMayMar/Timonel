@@ -1,0 +1,11 @@
+PackageIdentifier: EduMayMar.Timonel
+PackageVersion: ${version}
+InstallerType: portable
+Commands:
+  - timonel
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/EduMayMar/Timonel/releases/download/v${version}/timonel-windows-x64.exe
+    InstallerSha256: ${sha_windows}
+ManifestType: installer
+ManifestVersion: 1.6.0

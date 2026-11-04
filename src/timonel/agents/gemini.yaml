@@ -1,0 +1,29 @@
+name: gemini
+kind: agent
+title: Gemini CLI
+vendor: Google
+homepage: https://geminicli.com/docs
+verification: {status: verified, version: 0.66.0, date: "2026-11-03", source: "gemini --help; geminicli.com/docs/cli/headless"}
+install:
+  approx_size_mb: 100
+  npm: ["npm", "install", "-g", "@google/gemini-cli"]
+  pnpm: ["pnpm", "add", "-g", "@google/gemini-cli"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@google/gemini-cli"], pnpm: ["pnpm", "remove", "-g", "@google/gemini-cli"]}
+  drift: {npm: "@google/gemini-cli", help: [["--help"]]}
+login: {command: ["gemini"], flow: browser}
+agent:
+  enabled: false
+  env_pass: [GEMINI_API_KEY]
+  command: gemini
+  billing: subscription
+  parser: json
+  json_result_key: response
+  json_error_key: error
+  prompt_via: arg
+  base_args: ["--output-format", "json"]
+  read_args: ["--approval-mode", "plan"]
+  write_args: ["--approval-mode", "auto_edit"]
+  model_args: ["--model", "{model}"]
+  prompt_args: ["--prompt", "{prompt}"]
+  dangerous_args: ["--yolo"]
+  detect: {version: ["--version"]}

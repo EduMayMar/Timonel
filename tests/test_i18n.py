@@ -1,0 +1,134 @@
+import json
+import re
+from pathlib import Path
+
+import pytest
+
+from timonel import i18n
+from timonel.errors import TimonelError, all_codes, code_for, explain
+
+LOCALES = Path(__file__).parent.parent / "src" / "timonel" / "locales"
+PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
+
+
+def load(language: str) -> dict[str, str]:
+    data: dict[str, str] = json.loads((LOCALES / f"{language}.json").read_text(encoding="utf-8"))
+    return data
+
+
+@pytest.mark.parametrize("language", ["es", "pt"])
+def test_every_language_has_every_key(language: str) -> None:
+    english = load("en")
+    other = load(language)
+    assert sorted(set(english) - set(other)) == []
+    assert sorted(set(other) - set(english)) == []
+
+
+@pytest.mark.parametrize("language", ["en", "es", "pt"])
+def test_placeholders_match_english_and_nothing_is_empty(language: str) -> None:
+    english = load("en")
+    for key, text in load(language).items():
+        assert text.strip(), (language, key)
+        assert set(PLACEHOLDER.findall(text)) == set(PLACEHOLDER.findall(english[key])), (
+            language,
+            key,
+        )
+
+
+def test_every_locale_file_on_disk_is_listed() -> None:
+    assert sorted(path.stem for path in LOCALES.glob("*.json")) == sorted(i18n.LANGUAGES)
+
+
+@pytest.fixture
+def restore_language() -> object:
+    previous = i18n.current()
+    yield
+    i18n.set_language(previous)
+
+
+def test_language_choice_and_fallback(
+    monkeypatch: pytest.MonkeyPatch, restore_language: object
+) -> None:
+    assert i18n.choose("auto", {"TIMONEL_LANG": "pt_BR"}) == "pt"
+    assert i18n.choose("es", {}) == "es"
+    assert i18n.choose("auto", {"LANG": "es_ES.UTF-8"}) == "es"
+    monkeypatch.setattr(i18n.locale, "getlocale", lambda *args: (None, None))
+    assert i18n.choose("auto", {"LANG": "C"}) == "en"
+    i18n.set_language("es")
+    assert i18n.t("wizard.installed", name="Git") == "Git está instalado."
+    assert i18n.t("no.such.key") == "no.such.key"
+    i18n.set_language("xx")
+    assert i18n.current() == "en"
+
+
+def test_error_codes_are_documented_and_stable() -> None:
+    codes = all_codes()
+    assert codes == sorted(set(codes))
+    assert all(re.fullmatch(r"TMN-\d{4}", code) for code in codes)
+    docs = (Path(__file__).parent.parent / "docs" / "errors.md").read_text(encoding="utf-8")
+    for code in codes:
+        assert f"## {code}" in docs, code
+
+
+def test_errors_map_to_codes() -> None:
+    from timonel.config import ConfigError
+    from timonel.engine import RunError
+    from timonel.gitops import GitError
+    from timonel.router import RoutingError
+
+    assert code_for(GitError("/x is not inside a git repository")) == "TMN-2001"
+    assert code_for(GitError("the repository has uncommitted changes")) == "TMN-2002"
+    assert code_for(RoutingError("no usable agent for this task")) == "TMN-3001"
+    assert code_for(RoutingError("unknown profile 'x'")) == "TMN-3002"
+    assert code_for(RunError("unknown run x")) == "TMN-4001"
+    assert code_for(ConfigError(["bad"])) == "TMN-1001"
+    assert code_for(ValueError("boom")) == "TMN-9001"
+    detail = explain(TimonelError("TMN-8004", "sudo needed"))
+    assert detail.link.endswith("#tmn-8004")
+    assert detail.detail == "sudo needed"
+
+
+def test_every_key_the_web_page_uses_is_in_the_catalogs() -> None:
+    page = (LOCALES.parent / "web" / "index.html").read_text(encoding="utf-8")
+    used = set(re.findall(r'\bt\("([a-z0-9_.]+)"\)', page))
+    used |= set(re.findall(r'data-i18n="([a-z0-9_.]+)"', page))
+    for view in re.findall(r'data-view="([a-z]+)"', page):
+        used |= {f"nav.{view}"}
+    tour = re.search(r"const TOUR = \[([^\]]+)\]", page)
+    assert tour is not None
+    for step in re.findall(r'"([a-z]+)"', tour.group(1)):
+        used |= {f"tour.{step}", f"nav.{step}"}
+    areas = re.search(r"const AREAS = \[([^\]]+)\]", page)
+    assert areas is not None
+    used |= {f"settings.area.{name}" for name in re.findall(r'"([a-z]+)"', areas.group(1))}
+    for language in ("en", "es", "pt"):
+        catalog = load(language)
+        assert sorted(key for key in used if f"ui.{key}" not in catalog) == [], language
+
+
+def test_schema_areas_all_have_a_page_label() -> None:
+    from timonel import schema
+
+    english = load("en")
+    assert {option.area for option in schema.options()} <= {
+        key.removeprefix("ui.settings.area.")
+        for key in english
+        if key.startswith("ui.settings.area.")
+    }
+
+
+def test_schema_language_enum_matches_catalogs() -> None:
+    from timonel import schema
+
+    node = schema.node_at(("language",))
+    assert node is not None
+    assert sorted(node["enum"]) == sorted(["auto", *i18n.LANGUAGES])
+
+
+def test_every_literal_key_in_the_source_exists() -> None:
+    english = load("en")
+    source = LOCALES.parent
+    used: set[str] = set()
+    for path in source.rglob("*.py"):
+        used |= set(re.findall(r'\bt\(\s*"([a-z0-9_.A-Z-]+)"', path.read_text(encoding="utf-8")))
+    assert sorted(key for key in used if key not in english) == []

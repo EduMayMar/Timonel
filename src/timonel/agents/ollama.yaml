@@ -1,0 +1,11 @@
+name: ollama
+kind: provider
+title: Ollama (local models)
+vendor: Ollama
+homepage: https://docs.ollama.com/api/openai-compatibility
+verification: {status: docs, date: "2026-11-03", source: "docs.ollama.com/api/openai-compatibility"}
+install:
+  winget: ["winget", "install", "--id", "Ollama.Ollama", "-e"]
+  brew: ["brew", "install", "ollama"]
+provider: {api: openai, base_url: "http://localhost:11434/v1", key_env: "", key_required: false}
+agent: {command: ollama, billing: subscription, parser: text}

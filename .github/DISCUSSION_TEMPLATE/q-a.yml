@@ -1,0 +1,20 @@
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for asking. Please remove API keys, tokens and private paths from anything you paste.
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What did you try, and what happened?
+      description: Include the command and the `TMN-xxxx` code if there was one.
+  - type: input
+    id: version
+    attributes:
+      label: Output of `timonel --version` and your OS

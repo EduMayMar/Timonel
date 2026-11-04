@@ -1,0 +1,9 @@
+name: mistral
+kind: provider
+title: Mistral
+vendor: Mistral
+homepage: "https://api.mistral.ai/v1"
+verification: {status: unverified, date: "2026-11-03", source: "base URL from third-party integration guides; check the provider's documentation"}
+api_key: {env: MISTRAL_API_KEY}
+provider: {api: openai, base_url: "https://api.mistral.ai/v1", key_env: MISTRAL_API_KEY}
+agent: {command: mistral, billing: api, parser: text}

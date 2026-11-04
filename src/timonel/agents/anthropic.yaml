@@ -1,0 +1,9 @@
+name: anthropic
+kind: provider
+title: Anthropic API
+vendor: Anthropic
+homepage: https://platform.claude.com/docs/en/api/messages
+verification: {status: docs, date: "2026-11-03", source: "platform.claude.com Messages API (POST /v1/messages, model, max_tokens, messages)"}
+api_key: {env: ANTHROPIC_API_KEY, url: "https://platform.claude.com/settings/keys"}
+provider: {api: anthropic, base_url: "https://api.anthropic.com", key_env: ANTHROPIC_API_KEY}
+agent: {command: anthropic, billing: api, parser: text}

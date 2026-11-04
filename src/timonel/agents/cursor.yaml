@@ -1,0 +1,24 @@
+name: cursor
+kind: agent
+title: Cursor CLI
+vendor: Anysphere
+homepage: https://cursor.com/docs/cli/headless
+verification: {status: docs, date: "2026-11-03", source: "cursor.com/docs/cli/headless (CLI not installable in the build environment)"}
+install:
+  script:
+    posix: "https://cursor.com/install"
+    windows: "https://cursor.com/install?win32=true"
+  brew: ["brew", "install", "--cask", "cursor-cli"]
+api_key: {env: CURSOR_API_KEY, url: "https://cursor.com/docs/cli/headless"}
+agent:
+  enabled: false
+  command: agent
+  billing: subscription
+  parser: json
+  prompt_via: arg
+  base_args: ["--print", "--output-format", "json"]
+  read_args: []
+  write_args: ["--force"]
+  model_args: ["--model", "{model}"]
+  prompt_args: ["{prompt}"]
+  detect: {version: ["--version"], auth_env: [CURSOR_API_KEY]}

@@ -1,0 +1,23 @@
+name: Agent flags changed
+description: A CLI changed its flags, output format or exit codes
+labels: [adapter]
+body:
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and version
+      placeholder: codex-cli 0.170.0
+    validations:
+      required: true
+  - type: textarea
+    id: smoke
+    attributes:
+      label: Output of `timonel doctor --smoke`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: routes.yaml override that fixes it (if you found one)
+      render: yaml

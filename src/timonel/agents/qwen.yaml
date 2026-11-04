@@ -1,0 +1,27 @@
+name: qwen
+kind: agent
+title: Qwen Code
+vendor: Alibaba Qwen
+homepage: https://github.com/QwenLM/qwen-code
+verification: {status: verified, version: 0.26.6, date: "2026-11-03", source: "qwen --help"}
+install:
+  approx_size_mb: 150
+  npm: ["npm", "install", "-g", "@qwen-code/qwen-code"]
+  pnpm: ["pnpm", "add", "-g", "@qwen-code/qwen-code"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@qwen-code/qwen-code"], pnpm: ["pnpm", "remove", "-g", "@qwen-code/qwen-code"]}
+  drift: {npm: "@qwen-code/qwen-code", help: [["--help"]]}
+login: {command: ["qwen"], flow: browser}
+agent:
+  enabled: false
+  command: qwen
+  billing: subscription
+  parser: text
+  prompt_via: arg
+  base_args: ["--output-format", "text"]
+  read_args: ["--approval-mode", "plan"]
+  write_args: ["--approval-mode", "auto-edit"]
+  model_args: ["--model", "{model}"]
+  prompt_args: ["{prompt}"]
+  dangerous_args: ["--yolo"]
+  detect: {version: ["--version"]}
+  rate_limit_patterns: ["\\b429\\b", "capacity"]

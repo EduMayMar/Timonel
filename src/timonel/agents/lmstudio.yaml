@@ -1,0 +1,8 @@
+name: lmstudio
+kind: provider
+title: LM Studio (local models)
+vendor: LM Studio
+homepage: https://lmstudio.ai/docs/developer/openai-compat
+verification: {status: docs, date: "2026-11-03", source: "lmstudio.ai/docs/developer/openai-compat"}
+provider: {api: openai, base_url: "http://localhost:1234/v1", key_env: "", key_required: false}
+agent: {command: lmstudio, billing: subscription, parser: text}

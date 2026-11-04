@@ -1,0 +1,9 @@
+name: openrouter
+kind: provider
+title: OpenRouter
+vendor: OpenRouter
+homepage: https://openrouter.ai/docs/quickstart
+verification: {status: docs, date: "2026-11-03", source: "openrouter.ai/docs/quickstart"}
+api_key: {env: OPENROUTER_API_KEY, url: "https://openrouter.ai/settings/keys"}
+provider: {api: openai, base_url: "https://openrouter.ai/api/v1", key_env: OPENROUTER_API_KEY}
+agent: {command: openrouter, billing: api, parser: text}

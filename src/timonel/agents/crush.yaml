@@ -1,0 +1,26 @@
+name: crush
+kind: agent
+title: Crush
+vendor: Charm
+homepage: https://github.com/charmbracelet/crush
+verification: {status: verified, version: 0.99.0, date: "2026-11-03", source: "crush --help; crush run --help"}
+install:
+  approx_size_mb: 115
+  npm: ["npm", "install", "-g", "@charmland/crush"]
+  pnpm: ["pnpm", "add", "-g", "@charmland/crush"]
+  uninstall: {npm: ["npm", "uninstall", "-g", "@charmland/crush"], pnpm: ["pnpm", "remove", "-g", "@charmland/crush"]}
+  drift: {npm: "@charmland/crush", help: [["run", "--help"]]}
+login: {command: ["crush", "login"], flow: browser}
+agent:
+  enabled: false
+  command: crush
+  billing: api
+  parser: text
+  prompt_via: stdin
+  supports_read_only: false
+  base_args: ["run", "--quiet"]
+  model_args: ["--model", "{model}"]
+  effort_args: ["--reasoning-effort", "{effort}"]
+  dangerous_args: ["--yolo"]
+  models_command: ["models"]
+  detect: {version: ["--version"]}

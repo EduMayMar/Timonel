@@ -1,0 +1,9 @@
+name: gemini-api
+kind: provider
+title: Gemini API (OpenAI compatible)
+vendor: Google
+homepage: https://ai.google.dev/gemini-api/docs/openai
+verification: {status: docs, date: "2026-11-03", source: "ai.google.dev/gemini-api/docs/openai"}
+api_key: {env: GEMINI_API_KEY, url: "https://aistudio.google.com/apikey"}
+provider: {api: openai, base_url: "https://generativelanguage.googleapis.com/v1beta/openai", key_env: GEMINI_API_KEY}
+agent: {command: gemini-api, billing: api, parser: text}
