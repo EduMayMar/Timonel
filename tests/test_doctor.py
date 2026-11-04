@@ -72,3 +72,13 @@ def test_parse_models_output() -> None:
         "gemini-3-pro",
         "claude-sonnet-4-6",
     )
+
+
+def test_doctor_finds_api_key_stored_in_keyring(fakes: Fakes, isolated_system) -> None:  # type: ignore[no-untyped-def]
+    env = {key: value for key, value in fakes.env.items() if key != "DEEPSEEK_API_KEY"}
+    assert by_name(diagnose(make_config(), environ=env))["deepseek"].auth == "missing"
+    isolated_system.set_password("timonel", "DEEPSEEK_API_KEY", "sk-test")
+    deepseek = by_name(diagnose(make_config(), environ=env))["deepseek"]
+    assert deepseek.auth == "ok"
+    assert deepseek.auth_detail == "DEEPSEEK_API_KEY is in the keyring"
+    assert deepseek.usable

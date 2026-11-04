@@ -14,6 +14,7 @@ from timonel.adapters import (
     SecretMissingError,
     build_env,
     build_invocation,
+    lookup_secret,
     parse_output,
     passed_through,
     secret_sources,
@@ -80,9 +81,11 @@ def check_auth(
     agent: Agent, env: Mapping[str, str], environ: Mapping[str, str]
 ) -> tuple[AuthState, str]:
     if agent.detect.auth_env:
-        present = [name for name in agent.detect.auth_env if environ.get(name)]
-        if present:
-            return "ok", f"{present[0]} is set"
+        for name in agent.detect.auth_env:
+            if environ.get(name):
+                return "ok", f"{name} is set"
+            if lookup_secret(name, environ):
+                return "ok", f"{name} is in the keyring"
         if not agent.detect.auth:
             if agent.env_from:
                 return "missing", f"set {' or '.join(agent.detect.auth_env)}"
