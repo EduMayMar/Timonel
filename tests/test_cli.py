@@ -215,3 +215,31 @@ def test_module_entry_point(cli_env: Path) -> None:
     )
     assert completed.stdout.startswith("timonel ")
     assert run_git(Path.cwd(), "--version").startswith("git")
+
+
+def test_run_outside_git_offers_to_create_the_repository(
+    cli_env: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+
+    folder = tmp_path / "fresh"
+    folder.mkdir()
+    (folder / "app.py").write_text("print(1)\n", encoding="utf-8")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    answers = iter(["n"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    code, out = run_cli(capsys, "--config", str(cli_env), "run", "x", "--repo", str(folder))
+    assert code == 1 and "/git-init" in out and not (folder / ".git").exists()
+    answers = iter(["y", "y"])
+    code, out = run_cli(
+        capsys, "--config", str(cli_env), "run", "add [[edit all:b.py=1]]", "--repo", str(folder)
+    )
+    assert (folder / ".git").exists()
+    assert code == 0, out
+    code, out = run_cli(
+        capsys, "--config", str(cli_env), "run", "x", "--json", "--repo", str(tmp_path / "other")
+    )
+    assert code != 0

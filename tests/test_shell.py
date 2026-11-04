@@ -1,8 +1,10 @@
 import os
 import re
+import shutil
 import sys
 import time
 from collections.abc import Iterator
+from contextlib import suppress
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -33,8 +35,10 @@ def env(fakes: Fakes, monkeypatch: pytest.MonkeyPatch) -> Fakes:
     return fakes
 
 
-def make_shell(cwd: Path, answers: list[str], extra: str = "") -> tuple[shell.Shell, StringIO]:
-    config = make_config("tui: {check_on_start: false}\n" + extra)
+def make_shell(
+    cwd: Path, answers: list[str], extra: str = "", tui: str = ""
+) -> tuple[shell.Shell, StringIO]:
+    config = make_config(f"tui: {{check_on_start: false{', ' + tui if tui else ''}}}\n" + extra)
     buffer = StringIO()
     console = Console(file=buffer, width=120, no_color=True, highlight=False)
     pending = list(answers)
@@ -136,6 +140,34 @@ def test_slash_commands_reuse_the_cli_handlers(
     assert "simple" in out
 
 
+def test_repo_created_elsewhere_is_noticed_and_never_reinitialized(
+    env: Fakes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "later"
+    folder.mkdir()
+    instance, _ = make_shell(folder, ["y"], tui="confirm_run: false")
+    run_git(folder, "init", "-q")
+    (folder / "a.py").write_text("1\n", encoding="utf-8")
+    run_git(folder, "add", "-A")
+    run_git(folder, "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "-m", "mine")
+    called: list[object] = []
+    monkeypatch.setattr(commands, "offer_git_init", lambda *a, **k: called.append(a) or True)
+    instance.handle("add a file [[edit all:b.py=1]]")
+    assert called == []
+    assert instance.last_run is not None
+    assert run_git(folder, "log", "--oneline").count("\n") == 1
+
+
+def test_confirm_run_false_runs_without_asking(env: Fakes, repo: Path) -> None:
+    def never(question: str) -> str:
+        raise AssertionError("asked")
+
+    instance, _ = make_shell(repo, [], tui="confirm_run: false")
+    instance.ask = never
+    instance.handle("add [[edit all:c.py=1]]")
+    assert instance.last_run is not None
+
+
 def test_shortcuts_footer_and_completion() -> None:
     assert [value for value, _ in shell.completions("/re")] == ["/resume"]
     assert shell.completions("hello") == []
@@ -149,19 +181,28 @@ def test_shortcuts_footer_and_completion() -> None:
     assert instance.toggle_mode() == "expert"
     footer = instance.footer()
     assert "Shift+Tab" in footer and "F2" in footer and "Ctrl+D" in footer and "cheap" in footer
+    instance.unbound["profile"] = "s-tab"
+    assert "Shift+Tab" in instance.footer()
 
 
 def test_history_never_keeps_secrets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-abcdefghijklmnopqrstuvwxyz123456")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "plainvalue-without-prefix-0042")
     instance, _ = make_shell(tmp_path, [])
     path = tmp_path / "history"
+    path.write_text("", encoding="utf-8")
+    if os.name != "nt":
+        path.chmod(0o644)
     history = shell.SecretFilteredHistory(path, 3, instance.looks_secret).history
     history.store_string("fix the login bug")
     history.store_string("use sk-proj-abcdefghijklmnopqrstuvwxyz123456 for the test")
     history.store_string("token ghp_" + "a" * 36)
+    history.store_string("try plainvalue-without-prefix-0042 here")
+    history.store_string("key 3f9a7c1e5b2d4f6a8c0e9b7d5f3a1c2e")
     text = path.read_text(encoding="utf-8")
     assert "fix the login bug" in text
     assert "sk-proj" not in text and "ghp_" not in text
+    assert "plainvalue" not in text and "3f9a7c1e" not in text
     if os.name != "nt":
         assert path.stat().st_mode & 0o077 == 0
     for index in range(6):
@@ -169,6 +210,8 @@ def test_history_never_keeps_secrets(tmp_path: Path, monkeypatch: pytest.MonkeyP
     shell.trim_history(path, 3)
     kept = path.read_text(encoding="utf-8")
     assert "task 5" in kept and "task 2" not in kept
+    shell.trim_history(path, 0)
+    assert path.read_text(encoding="utf-8") == ""
 
 
 def test_git_init_flow_with_gitignore_and_risky_files(
@@ -197,13 +240,26 @@ def test_git_init_flow_with_gitignore_and_risky_files(
     answers = iter(["y", "n"])
     assert not commands.offer_git_init(risky, ask=lambda q: next(answers), say=said.append)
     assert any(".env" in line for line in said)
-    assert (risky / ".git").exists()
-    import subprocess
-
-    assert subprocess.run(["git", "log"], cwd=risky, capture_output=True).returncode != 0
+    assert not (risky / ".git").exists()
     assert gitops.is_sensitive("config/.env.production")
     assert not gitops.is_sensitive(".env.example")
     assert gitops.is_sensitive("certs/server.pem")
+    for name in (
+        ".ssh/id_ecdsa",
+        ".aws/credentials",
+        ".git-credentials",
+        ".kube/config",
+        "deploy/service-account.json",
+        "infra/terraform.tfstate",
+        ".envrc",
+        "secrets.yaml",
+    ):
+        assert gitops.is_sensitive(name), name
+    assert not gitops.is_sensitive("src/app.py")
+    said.clear()
+    assert not commands.offer_git_init(Path.home(), ask=lambda q: "y", say=said.append)
+    assert any("will not create a repository" in line for line in said)
+    assert gitops.too_broad(Path(Path.home().anchor))
 
 
 def test_running_a_task_outside_git_offers_the_repository(
@@ -242,8 +298,11 @@ class PosixTerminal:
 
         self.pid, self.fd = pty.fork()
         if self.pid == 0:
-            os.chdir(cwd)
-            os.execvpe(argv[0], argv, env)
+            try:
+                os.chdir(cwd)
+                os.execvpe(argv[0], argv, env)
+            finally:
+                os._exit(127)
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 110, 0, 0))
         self.output = ""
 
@@ -272,8 +331,19 @@ class PosixTerminal:
             self.read(0.1)
             pid, status = os.waitpid(self.pid, os.WNOHANG)
             if pid:
+                self.pid = 0
                 return os.waitstatus_to_exitcode(status)
         return None
+
+    def close(self) -> None:
+        import signal
+
+        if self.pid:
+            with suppress(OSError):
+                os.kill(self.pid, signal.SIGKILL)
+                os.waitpid(self.pid, 0)
+        with suppress(OSError):
+            os.close(self.fd)
 
 
 class WindowsTerminal:
@@ -296,17 +366,35 @@ class WindowsTerminal:
         end = time.time() + timeout
         while time.time() < end and self.process.isalive():
             self.read(0.1)
-        return None if self.process.isalive() else int(self.process.exitstatus or 0)
+        if self.process.isalive():
+            return None
+        status = self.process.exitstatus
+        return None if status is None else int(status)
+
+    def close(self) -> None:
+        if self.process.isalive():
+            self.process.terminate(force=True)
 
 
 def expect(terminal: Any, text: str, timeout: float = 30) -> str:
     end = time.time() + timeout
+    start = getattr(terminal, "seen", 0)
     while time.time() < end:
         terminal.read(0.2)
         clean = ANSI.sub("", terminal.output)
-        if text in clean:
+        found = clean.find(text, start)
+        if found >= 0:
+            terminal.seen = found + len(text)
             return clean
     raise AssertionError(f"{text!r} not seen; output was:\n{ANSI.sub('', terminal.output)[-3000:]}")
+
+
+@pytest.fixture
+def terminals() -> Iterator[list[Any]]:
+    opened: list[Any] = []
+    yield opened
+    for terminal in opened:
+        terminal.close()
 
 
 @pytest.fixture
@@ -321,15 +409,23 @@ def terminal_env(fakes: Fakes, home: Path, repo: Path) -> dict[str, str]:
         "PROMPT_TOOLKIT_NO_CPR": "1",
         "TIMONEL_LANG": "en",
         "PYTHONUTF8": "1",
+        "PATH": os.pathsep.join(
+            [
+                str(fakes.bin_dir),
+                str(Path(shutil.which("git") or "git").parent),
+                str(Path(sys.executable).parent),
+            ]
+        ),
     }
     environment.pop("NO_COLOR", None)
     return environment
 
 
 def test_terminal_session_task_slash_command_and_exit(
-    terminal_env: dict[str, str], repo: Path, home: Path
+    terminal_env: dict[str, str], repo: Path, home: Path, terminals: list[Any]
 ) -> None:
     terminal = spawn([sys.executable, "-m", "timonel"], repo, terminal_env)
+    terminals.append(terminal)
     expect(terminal, "Describe a task")
     expect(terminal, "ready")
     terminal.write("/re")
@@ -341,6 +437,13 @@ def test_terminal_session_task_slash_command_and_exit(
     time.sleep(0.5)
     terminal.write("\r")
     expect(terminal, "/git-init")
+    terminal.write("\x03")
+    terminal.write("/profile max\r")
+    expect(terminal, "Profile for this session: max.")
+    terminal.write("add a greeting [[edit all:greet.py=print('hi')]]\r")
+    expect(terminal, "Run this plan?")
+    terminal.write("\x03")
+    expect(terminal, "Aborted")
     terminal.write("add a greeting [[edit all:greet.py=print('hi')]]\r")
     expect(terminal, "Run this plan?")
     terminal.write("y\r")
@@ -352,8 +455,11 @@ def test_terminal_session_task_slash_command_and_exit(
     assert "add a greeting" in history
 
 
-def test_terminal_ctrl_c_cancels_a_running_task(terminal_env: dict[str, str], repo: Path) -> None:
+def test_terminal_ctrl_c_cancels_a_running_task(
+    terminal_env: dict[str, str], repo: Path, home: Path, terminals: list[Any]
+) -> None:
     terminal = spawn([sys.executable, "-m", "timonel"], repo, {**terminal_env, "FAKE_MODE": "hang"})
+    terminals.append(terminal)
     expect(terminal, "Describe a task")
     terminal.write("add a slow change [[edit all:slow.py=1]]\r")
     expect(terminal, "Run this plan?")
@@ -363,6 +469,10 @@ def test_terminal_ctrl_c_cancels_a_running_task(terminal_env: dict[str, str], re
     terminal.write("\x03")
     expect(terminal, "Cancelling run")
     expect(terminal, "cancelled", timeout=60)
+    from timonel.ledger import Ledger
+
+    runs = Ledger(home / "ledger.sqlite").list_runs(limit=5)
+    assert runs and runs[0]["status"] == "cancelled"
     terminal.write("\x04")
     expect(terminal, "Bye.")
     assert terminal.wait(15) == 0

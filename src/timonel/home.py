@@ -278,9 +278,12 @@ def gather(
     spend: float | None = None
     budget = ""
     if config.tui.show_spend:
-        book = ledger or open_ledger(config.paths.ledger)
-        spend = spend_since(book, start_of_day())
-        budget = budget_line(config, book)
+        try:
+            book = ledger or open_ledger(config.paths.ledger)
+            spend = spend_since(book, start_of_day())
+            budget = budget_line(config, book)
+        except Exception:
+            spend, budget = None, ""
     return HomeInfo(
         version=__version__,
         profile=profile or config.default_profile,
@@ -294,8 +297,15 @@ def gather(
     )
 
 
+CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def clean(text: str) -> str:
+    return CONTROL.sub("?", text)
+
+
 def short_path(path: Path) -> str:
-    text = str(path)
+    text = clean(str(path))
     home = str(Path.home())
     return "~" + text[len(home) :] if text.startswith(home) and home != "/" else text
 
@@ -351,6 +361,7 @@ def info_lines(info: HomeInfo, glyphs: Glyphs, color: bool) -> Text:
 
 
 def fit(text: str, width: int, more: str = "…") -> str:
+    text = clean(text)
     if width <= 0:
         return ""
     return text if len(text) <= width else text[: max(width - len(more), 0)] + more
@@ -373,7 +384,7 @@ def agents_table(
     for index, (name, status) in enumerate(rows):
         style = STATE_STYLE[status.state] if color else ""
         covers = f" {glyphs.sep} ".join(info.coverage.get(name, ()))
-        if not unicode_ok() or glyphs is ASCII:
+        if glyphs is ASCII:
             covers = covers.encode("ascii", "replace").decode()
         if index:
             text.append("\n")
@@ -394,8 +405,8 @@ def notice_lines(info: HomeInfo, glyphs: Glyphs, color: bool) -> Text:
     text = Text()
     for notice in info.notices:
         text.append(f"{glyphs.warn} ", style="yellow" if color else "")
-        text.append(f"{notice.text} {glyphs.arrow} ")
-        text.append(notice.command, style="bold cyan" if color else "")
+        text.append(f"{clean(notice.text)} {glyphs.arrow} ")
+        text.append(clean(notice.command), style="bold cyan" if color else "")
         text.append("\n")
     text.rstrip()
     return text
@@ -441,13 +452,16 @@ def top_block(info: HomeInfo, config: Config, console: Console) -> RenderableTyp
     color = style == "color"
     brass = BRASS.get(config.tui.theme, BRASS["auto"]) if color else ""
     if config.tui.compact or style == "none":
-        line = Text(no_wrap=True, overflow="ellipsis")
-        line.append(f"{glyphs.helm} ", style=brass)
-        line.append(f"Timonel {info.version}", style="bold" if color else "")
-        line.append(
-            f" {glyphs.sep} {info.profile} {glyphs.sep} {t(f'home.mode.{info.mode}')} {glyphs.sep} "
-            + place_line(info.place)
+        rest = (
+            f" {glyphs.sep} {info.profile} {glyphs.sep} {t(f'home.mode.{info.mode}')} "
+            f"{glyphs.sep} {place_line(info.place)}"
         )
+        title = f"Timonel {info.version}"
+        line = Text(no_wrap=True)
+        line.append(f"{glyphs.helm} ", style=brass)
+        line.append(title, style="bold" if color else "")
+        room = console.width - len(glyphs.helm) - 1 - len(title)
+        line.append(fit(rest, room, glyphs.more))
         return line
     logo = logo_block(style, config.tui.theme) or Text("")
     grid = Table.grid(padding=(0, 2))
@@ -545,9 +559,9 @@ def read_cache(path: Path, max_age_s: float, now: float) -> dict[str, AgentStatu
 
 def write_cache(path: Path, statuses: Mapping[str, AgentStatus]) -> None:
     keep = {
-        name: {key: value for key, value in asdict(status).items() if key != "name"}
+        name: {key: value for key, value in asdict(status).items() if key not in ("name", "detail")}
         for name, status in statuses.items()
-        if status.state not in ("checking", "unchecked", "no_answer")
+        if status.state not in ("checking", "unchecked", "no_answer") and not status.detail
     }
     temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
@@ -586,6 +600,7 @@ class StatusBoard:
             name: cached.get(name, AgentStatus(name, "unchecked")) for name in names
         }
         self.done = threading.Event()
+        self.rounds: dict[str, int] = {}
 
     def snapshot(self) -> dict[str, AgentStatus]:
         with self.lock:
@@ -602,18 +617,26 @@ class StatusBoard:
         if self.on_change is not None:
             self.on_change()
 
-    def check_one(self, name: str) -> None:
+    def current(self, name: str, round_number: int) -> bool:
+        with self.lock:
+            return self.rounds.get(name) == round_number
+
+    def check_one(self, name: str, round_number: int) -> None:
         agent = self.config.agents[name]
         try:
             health = self.inspect(agent, self.config, models=False, environ=self.environ)
         except Exception as error:
-            self.set(AgentStatus(name, "no_answer", detail=type(error).__name__))
+            if self.current(name, round_number):
+                self.set(AgentStatus(name, "no_answer", detail=type(error).__name__))
             return
-        self.set(status_from_health(health, self.clock()))
+        if self.current(name, round_number):
+            self.set(status_from_health(health, self.clock()))
 
-    def expire(self, name: str) -> None:
+    def expire(self, name: str, round_number: int) -> None:
         with self.lock:
-            still = self.statuses[name].state == "checking"
+            still = (
+                self.rounds.get(name) == round_number and self.statuses[name].state == "checking"
+            )
         if still:
             self.set(AgentStatus(name, "no_answer", detail="timeout"))
 
@@ -630,10 +653,16 @@ class StatusBoard:
         with self.lock:
             for name in stale:
                 self.statuses[name] = replace(self.statuses[name], state="checking")
+                self.rounds[name] = self.rounds.get(name, 0) + 1
+            numbers = {name: self.rounds[name] for name in stale}
         threads = []
         for name in stale:
-            worker = threading.Thread(target=self.check_one, args=(name,), daemon=True)
-            timer = threading.Timer(self.config.tui.check_timeout_s, self.expire, args=(name,))
+            worker = threading.Thread(
+                target=self.check_one, args=(name, numbers[name]), daemon=True
+            )
+            timer = threading.Timer(
+                self.config.tui.check_timeout_s, self.expire, args=(name, numbers[name])
+            )
             timer.daemon = True
             worker.start()
             timer.start()

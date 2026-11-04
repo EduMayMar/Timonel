@@ -281,3 +281,89 @@ def test_missing_prompt_toolkit_degrades_to_static(
     assert shell.interactive(config, home_dir, Console(width=80)) == 0
     out = capsys.readouterr().out
     assert "prompt_toolkit" in out and "/exit" in out
+
+
+def test_compact_and_logo_none_are_one_line_headers() -> None:
+    from io import StringIO
+
+    from rich.console import Console
+
+    for extra in ("tui: {compact: true}\n", "tui: {logo: none}\n"):
+        config = sample_config(extra)
+        console = Console(file=StringIO(), width=60, no_color=True)
+        text = home.render_text(
+            home.top_block(sample_info(config, STATUSES), config, console), 60, False
+        )
+        assert len(text.strip().splitlines()) == 1
+        assert "Timonel 9.9.9" in text and "balanced" in text
+
+
+def test_non_utf_console_falls_back_to_ascii(monkeypatch: pytest.MonkeyPatch) -> None:
+    from rich.console import Console
+
+    class Legacy:
+        encoding = "cp1252"
+
+        def write(self, text: str) -> int:
+            return len(text)
+
+        def flush(self) -> None:
+            return None
+
+    console = Console(file=Legacy(), width=80, force_terminal=True)  # type: ignore[arg-type]
+    assert home.pick_logo("auto", console) == "ascii"
+    monkeypatch.setenv("TERM", "dumb")
+    assert not home.unicode_ok(type("S", (), {"encoding": "utf-8"})())
+
+
+def test_folder_names_cannot_inject_terminal_sequences() -> None:
+    assert "\x1b" not in home.short_path(Path("/tmp/x\x1b]0;PWN\x07y"))
+    assert "\x1b" not in home.fit("a\x1b[2Jb", 20)
+
+
+def test_notice_list_is_configurable(home_dir: Path) -> None:
+    config = sample_config("tui: {notices: [login]}\n")
+    place = home.Place(cwd=home_dir)
+    found = home.notices(config, place, {"codex": home.AgentStatus("codex", "login")})
+    assert [notice.command for notice in found] == ["codex login"]
+
+
+def test_a_stale_timeout_does_not_mark_a_newer_check(tmp_path: Path) -> None:
+    config = sample_config("tui: {check_timeout_s: 1}\n")
+    slow = {"value": 0.0}
+
+    def inspect(agent: object, config: object, **kwargs: object) -> AgentHealth:
+        time.sleep(slow["value"])
+        return health(agent.name)  # type: ignore[attr-defined]
+
+    board = home.StatusBoard(config, ("claude",), path=tmp_path / "s.json", inspect=inspect)
+    board.start()
+    assert board.wait(5)
+    time.sleep(0.7)
+    slow["value"] = 0.8
+    board.start(force=True)
+    time.sleep(0.5)
+    assert board.snapshot()["claude"].state == "checking"
+    assert board.wait(5)
+    assert board.snapshot()["claude"].state == "ready"
+
+
+def test_non_tty_subprocess_exits_zero_without_escape_codes(home_dir: Path) -> None:
+    import subprocess
+    import sys
+
+    env = {**os.environ, "TIMONEL_HOME": str(home_dir / "home"), "TIMONEL_LANG": "en"}
+    for argv in ([], ["home", "--once"], ["--set", "tui.enabled=false"]):
+        result = subprocess.run(
+            [sys.executable, "-m", "timonel", "--set", "tui.check_on_start=false", *argv],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+            cwd=home_dir,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "\x1b[" not in result.stdout
+        assert "Agents" in result.stdout

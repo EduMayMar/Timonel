@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import difflib
 import os
+import re
 import shlex
 import shutil
 import threading
 from collections.abc import Callable, Iterable, Sequence
+from contextlib import suppress
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +16,7 @@ from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
 from timonel import commands, home, wizard
-from timonel.config import Config
+from timonel.config import Config, TuiKeys
 from timonel.doctor import default_names
 from timonel.gitops import GitError
 from timonel.i18n import t
@@ -47,6 +50,7 @@ MENU_STYLE = {
     "completion-menu.meta.completion": "bg:#13233a #9aa6b6",
     "completion-menu.meta.completion.current": "bg:#c08a2c #0d1726",
 }
+TOKEN_LIKE = re.compile(r"(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{32,}")
 PROFILE_ORDER = ("cheap", "balanced", "max")
 PASSTHROUGH: dict[str, tuple[str, ...]] = {
     "agents": ("agents",),
@@ -60,6 +64,7 @@ PASSTHROUGH: dict[str, tuple[str, ...]] = {
     "learn": ("learn",),
 }
 DEFAULT_ARGS: dict[str, tuple[str, ...]] = {"agents": ("list",), "config": ("list",)}
+TAKES_ARGUMENTS = ("plan", "run", "config", "profile", "mode", "learn")
 NEEDS_RUN_ID = ("diff", "apply", "discard", "resume")
 
 
@@ -82,6 +87,7 @@ class Shell:
         self.profile = config.default_profile
         self.mode = config.mode
         self.last_run: str | None = None
+        self.unbound: dict[str, str] = {}
         self.board = board or home.StatusBoard(
             config, tuple(sorted(default_names(config))), environ=self.environ
         )
@@ -93,7 +99,7 @@ class Shell:
         self.info = home.gather(config, cwd, self.board.snapshot(), self.profile, self.mode)
 
     def looks_secret(self, line: str) -> bool:
-        return self.redactor(line) != line
+        return self.redactor(line) != line or bool(TOKEN_LIKE.search(line))
 
     def refresh_info(self) -> None:
         self.info = home.gather(
@@ -102,13 +108,11 @@ class Shell:
 
     def header(self, agents: bool = True) -> RenderableType:
         statuses = self.board.snapshot()
-        info = home.HomeInfo(
-            **{
-                **self.info.__dict__,
-                "profile": self.profile,
-                "mode": self.mode,
-                "notices": home.notices(self.config, self.info.place, statuses),
-            }
+        info = replace(
+            self.info,
+            profile=self.profile,
+            mode=self.mode,
+            notices=home.notices(self.config, self.info.place, statuses),
         )
         if agents:
             return home.header(info, statuses, self.config, self.console)
@@ -116,12 +120,7 @@ class Shell:
 
     def panel(self) -> RenderableType:
         statuses = self.board.snapshot()
-        info = home.HomeInfo(
-            **{
-                **self.info.__dict__,
-                "notices": home.notices(self.config, self.info.place, statuses),
-            }
-        )
+        info = replace(self.info, notices=home.notices(self.config, self.info.place, statuses))
         return home.status_block(info, statuses, self.config, self.console)
 
     def status_line(self) -> str:
@@ -133,7 +132,7 @@ class Shell:
         return " · ".join(parts)
 
     def footer(self) -> str:
-        keys = self.config.tui.keys
+        keys = replace(self.config.tui.keys, **self.unbound)
         return t(
             "home.footer",
             profile=self.profile,
@@ -203,6 +202,7 @@ class Shell:
         if name == "help":
             self.say(home.help_text())
         elif name == "clear":
+            self.refresh_info()
             self.console.clear()
             self.console.print(self.header())
         elif name in ("plan", "run"):
@@ -214,8 +214,8 @@ class Shell:
             self.choose_profile(rest)
         elif name == "mode":
             if rest and rest[0] in ("simple", "expert"):
-                self.invoke(("mode", rest[0]))
-                self.mode = rest[0]
+                if self.invoke(("mode", rest[0])) == 0:
+                    self.mode = rest[0]
             else:
                 self.say(t("home.mode_now", mode=t(f"home.mode.{self.mode}")))
         elif name == "ui":
@@ -236,6 +236,8 @@ class Shell:
         self.invoke(argv)
         if name == "doctor":
             self.board.start(force=True)
+        if name in ("apply", "discard"):
+            self.refresh_info()
 
     def choose_profile(self, rest: list[str]) -> None:
         if not rest:
@@ -254,15 +256,18 @@ class Shell:
         self.say(t("home.profile_set", name=self.profile))
 
     def git_init(self) -> bool:
-        if self.info.place.repo is not None:
-            self.say(t("home.already_git", path=str(self.info.place.repo)))
+        current = home.place_of(self.cwd)
+        if current.repo is not None:
+            self.refresh_info()
+            self.say(t("home.already_git", path=str(current.repo)))
             return True
         try:
             created = commands.offer_git_init(self.cwd, ask=self.ask, say=self.say)
         except GitError as error:
             self.say(str(error))
             return False
-        self.refresh_info()
+        finally:
+            self.refresh_info()
         return created
 
     def task(self, text: str, *, run: bool) -> None:
@@ -277,7 +282,7 @@ class Shell:
         cli.print_plan(plan)
         if not run:
             return
-        if self.info.place.repo is None:
+        if home.place_of(self.cwd).repo is None:
             self.say(t("home.run_needs_git"))
             if not self.git_init():
                 return
@@ -316,7 +321,12 @@ class Shell:
         except KeyboardInterrupt:
             self.say(t("home.cancelling", id=run_id))
             engine.cancel(run_id)
-            worker.join(60)
+            while worker.is_alive():
+                try:
+                    worker.join(0.5)
+                except KeyboardInterrupt:
+                    self.say(t("home.still_cancelling"))
+        self.refresh_info()
         if "error" in outcome:
             cli.report_error(outcome["error"])
             return
@@ -347,6 +357,8 @@ class SecretFilteredHistory:
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             path.touch(mode=0o600)
+        with suppress(OSError):
+            path.chmod(0o600)
         trim_history(path, keep)
         self.history = Filtered(str(path))
 
@@ -357,7 +369,9 @@ def trim_history(path: Path, keep: int) -> None:
     except OSError:
         return
     starts = [index for index, line in enumerate(lines) if line.startswith("# ")]
-    if keep > 0 and len(starts) > keep:
+    if keep <= 0 and lines:
+        path.write_text("", encoding="utf-8")
+    elif len(starts) > keep:
         path.write_text("".join(lines[starts[-keep] :]), encoding="utf-8")
 
 
@@ -378,8 +392,9 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
     try:
         from prompt_toolkit import PromptSession
         from prompt_toolkit import prompt as plain_prompt
+        from prompt_toolkit.application import get_app
         from prompt_toolkit.completion import Completer, Completion
-        from prompt_toolkit.filters import completion_is_selected
+        from prompt_toolkit.filters import Condition, completion_is_selected
         from prompt_toolkit.formatted_text import ANSI
         from prompt_toolkit.key_binding import KeyBindings
         from prompt_toolkit.styles import Style
@@ -409,11 +424,13 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
     bindings = KeyBindings()
     state = {"first": True}
 
-    def bind(key: str, action: Callable[[Any], None]) -> None:
+    def bind(field: str, key: str, action: Callable[[Any], None], **options: Any) -> None:
         try:
-            bindings.add(key)(action)
+            bindings.add(key, **options)(action)
         except (ValueError, KeyError):
-            return
+            default = getattr(TuiKeys(), field)
+            shell.unbound[field] = default
+            bindings.add(default, **options)(action)
 
     def next_profile(event: Any) -> None:
         shell.cycle_profile()
@@ -434,29 +451,29 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
     @bindings.add("enter", filter=completion_is_selected)
     def run_selected(event: Any) -> None:
         buffer = event.current_buffer
-        state = buffer.complete_state
-        if state is not None and state.current_completion is not None:
-            buffer.apply_completion(state.current_completion)
+        selected = buffer.complete_state
+        if selected is not None and selected.current_completion is not None:
+            buffer.apply_completion(selected.current_completion)
+        if buffer.text.strip().lstrip("/") in TAKES_ARGUMENTS:
+            buffer.insert_text(" ")
+            return
         buffer.validate_and_handle()
 
+    empty = Condition(lambda: not get_app().current_buffer.text)
     keys = config.tui.keys
-    bind(keys.profile, next_profile)
-    bind(keys.mode, next_mode)
-    bind(keys.help, show_help)
-    bind(keys.exit, leave)
+    bind("profile", keys.profile, next_profile)
+    bind("mode", keys.mode, next_mode)
+    bind("help", keys.help, show_help)
+    bind("exit", keys.exit, leave, filter=empty)
+
+    plain = console.no_color or console.color_system is None
+    dim, reset = ("", "") if plain else ("\x1b[2m", "\x1b[0m")
 
     def message() -> Any:
-        rule = home.glyphs_for(config, console).rule
+        glyphs = home.glyphs_for(config, console)
         width = shutil.get_terminal_size((80, 24)).columns
         top = ansi(shell.panel(), console) if state["first"] else ""
-        return ANSI(
-            top
-            + "\x1b[2m"
-            + rule * width
-            + "\x1b[0m\n"
-            + home.glyphs_for(config, console).prompt
-            + " "
-        )
+        return ANSI(f"{top}{dim}{glyphs.rule * width}{reset}\n{glyphs.prompt} ")
 
     def toolbar() -> Any:
         lines = Group(Text(shell.status_line(), style="dim"), Text(shell.footer(), style="dim"))
@@ -470,14 +487,14 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
     session: Any = PromptSession(
         message=message,
         bottom_toolbar=toolbar,
-        placeholder=ANSI("\x1b[2m" + (config.tui.placeholder or t("home.placeholder")) + "\x1b[0m"),
+        placeholder=ANSI(dim + (config.tui.placeholder or t("home.placeholder")) + reset),
         completer=SlashCompleter(),
         complete_while_typing=True,
         history=history,
         key_bindings=bindings,
         refresh_interval=config.tui.refresh_s,
         reserve_space_for_menu=4,
-        style=Style.from_dict(MENU_STYLE),
+        style=Style.from_dict({"bottom-toolbar": "noreverse"} if plain else MENU_STYLE),
     )
     session_ref["session"] = session
     shell.ask = lambda question: plain_prompt(question)
@@ -489,7 +506,12 @@ def interactive(config: Config, cwd: Path, console: Console) -> int:
         except EOFError:
             break
         state["first"] = False
-        if not shell.handle(line):
+        try:
+            keep = shell.handle(line)
+        except (KeyboardInterrupt, EOFError):
+            shell.say(t("common.aborted"))
+            continue
+        if not keep:
             break
     console.print(t("home.bye"))
     return 0

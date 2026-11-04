@@ -17,7 +17,8 @@ Run `timonel` with no arguments in a terminal and the home screen opens:
   (classification, route and reasons), asks, then runs it with a live timeline. Ctrl+C cancels the
   run cleanly. History is kept between sessions, except lines that look like secrets.
 - **Footer**: agent states and the shortcuts: Shift+Tab cycles the profile, F2 toggles simple/expert
-  for the session, F1 shows help, Ctrl+D leaves.
+  for the session, F1 shows help, Ctrl+D leaves (on an empty line). Ctrl+C at any question
+  cancels it and returns to the input box.
 
 ## Commands
 
@@ -38,6 +39,9 @@ Type `/` to see them with a short description:
 | `/git-init` | Create a git repository here, with explanation and confirmation |
 | `/help`, `/clear`, `/exit` | Help, clear the screen, leave |
 
+Picking a command that needs more text (such as `/plan` or `/config`) from the menu completes it and
+waits for you to type the rest; the others run at once.
+
 Every command reuses the same code as `timonel <command>` outside the screen.
 
 ![Plan shown before running](screenshots/terminal-plan.png)
@@ -48,7 +52,9 @@ Every command reuses the same code as `timonel <command>` outside the screen.
 branch that you review before keeping. The home screen (and `timonel run`) explain this and offer to
 run `git init` and a first commit. Before that, if there is no `.gitignore`, Timonel offers a basic one
 so that `.env`, `node_modules`, `.venv` and similar are not saved; if files that look like secrets
-would still be committed, it lists them and stops unless you confirm.
+would still be committed, it lists them and stops unless you confirm; if you stop, no half-made
+repository is left behind. It refuses to create a repository in your home folder (or any folder above
+it) and stops if more than 5,000 files would be committed, because that is almost never a project.
 
 ## Without a terminal, plain text and narrow windows
 
