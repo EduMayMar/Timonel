@@ -156,3 +156,28 @@ def test_failed_runs_show_their_reason() -> None:
 
 def test_nothing_to_say_gives_an_empty_block() -> None:
     assert history_text([], ContextSettings()) == ""
+
+
+def test_greeting_is_answered_read_only() -> None:
+    from timonel.classify import heuristic
+
+    for text in ("Hola", "hola, gracias!", "Hello"):
+        guess = heuristic(text)
+        assert guess.kind == "explain" and not guess.needs_write
+    assert heuristic("hola, añade un botón").kind == "edit"
+    assert heuristic("añade un botón").needs_write
+
+
+def test_answer_without_changes_does_not_escalate(fakes: Fakes, repo: Path) -> None:
+    engine = engine_for(fakes)
+    outcome = engine.run(RunOptions(task="please do something vague", repo=repo))
+    attempts = [call for call in fakes.calls() if "TIMONEL_CLASSIFY" not in str(call["prompt"])]
+    assert outcome["status"] == "succeeded"
+    assert len(attempts) == 1
+
+
+def test_escalation_still_happens_when_the_limit_is_zero(fakes: Fakes, repo: Path) -> None:
+    engine = engine_for(fakes, "escalation: {answer_without_changes_max_complexity: 0}\n")
+    engine.run(RunOptions(task="please do something vague", repo=repo))
+    attempts = [call for call in fakes.calls() if "TIMONEL_CLASSIFY" not in str(call["prompt"])]
+    assert len(attempts) > 1

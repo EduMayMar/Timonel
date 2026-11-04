@@ -38,7 +38,10 @@ def env(fakes: Fakes, monkeypatch: pytest.MonkeyPatch) -> Fakes:
 def make_shell(
     cwd: Path, answers: list[str], extra: str = "", tui: str = ""
 ) -> tuple[shell.Shell, StringIO]:
-    config = make_config(f"tui: {{check_on_start: false{', ' + tui if tui else ''}}}\n" + extra)
+    config = make_config(
+        f"tui: {{check_on_start: false, classify_with_model: false{', ' + tui if tui else ''}}}\n"
+        + extra
+    )
     buffer = StringIO()
     console = Console(file=buffer, width=120, no_color=True, highlight=False)
     pending = list(answers)
@@ -116,7 +119,7 @@ def test_slash_commands_reuse_the_cli_handlers(
     restarted: list[bool] = []
     monkeypatch.setattr(instance.board, "start", lambda force=False: restarted.append(force) or [])
     for line in (
-        "/agents",
+        "/agents list",
         "/stats",
         "/config get mode",
         "/learn",
@@ -409,7 +412,8 @@ def terminals() -> Iterator[list[Any]]:
 @pytest.fixture
 def terminal_env(fakes: Fakes, home: Path, repo: Path) -> dict[str, str]:
     (home / "routes.yaml").write_text(
-        TEST_ROUTES + "tui: {check_timeout_s: 10, history: true}\n", encoding="utf-8"
+        TEST_ROUTES + "tui: {check_timeout_s: 10, history: true, classify_with_model: false}\n",
+        encoding="utf-8",
     )
     environment = {
         **fakes.env,
@@ -531,9 +535,35 @@ def test_terminal_keeps_earlier_text_when_clear_screen_is_off(
     if WINDOWS:
         pytest.skip("ConPTY escape sequences are not verified")
     (home / "routes.yaml").write_text(
-        TEST_ROUTES + "tui: {check_timeout_s: 10, clear_screen: false}\n", encoding="utf-8"
+        TEST_ROUTES
+        + "tui: {check_timeout_s: 10, clear_screen: false, classify_with_model: false}\n",
+        encoding="utf-8",
     )
     terminal = spawn([sys.executable, "-m", "timonel"], repo, terminal_env)
     terminals.append(terminal)
     expect(terminal, "Describe a task")
     assert "\x1b[2J" not in terminal.output
+
+
+def test_agents_menu_flips_an_agent_and_saves_it(env: Fakes, repo: Path, home: Path) -> None:
+    instance, buffer = make_shell(repo, ["2", ""])
+    second = sorted(instance.config.agents)[1]
+    before = instance.config.agents[second].enabled
+    assert instance.handle("/agents")
+    assert instance.config.agents[second].enabled is (not before)
+    assert ("●" if not before else "○") in buffer.getvalue()
+
+
+def test_agents_menu_twice_restores_the_agent(env: Fakes, repo: Path, home: Path) -> None:
+    instance, _ = make_shell(repo, ["2", "2", ""])
+    second = sorted(instance.config.agents)[1]
+    before = instance.config.agents[second].enabled
+    assert instance.handle("/agents")
+    assert instance.config.agents[second].enabled is before
+
+
+def test_read_only_task_runs_without_asking(env: Fakes, repo: Path) -> None:
+    instance, buffer = make_shell(repo, [])
+    assert instance.handle("explain greet.py [[say:it prints hi]]")
+    assert "Run this plan?" not in buffer.getvalue()
+    assert instance.last_run is not None

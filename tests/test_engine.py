@@ -46,9 +46,13 @@ def executes(engine: Engine, run_id: str) -> list[tuple[str, str]]:
     ]
 
 
+STRICT_ESCALATION = "escalation: {answer_without_changes_max_complexity: 0}\n"
+
+
 def with_env(fakes: Fakes, config_extra: str = "", **values: str) -> Engine:
     store = Ledger()
-    return Engine(make_config(config_extra), store, environ={**fakes.env, **values})
+    legacy = "" if "escalation:" in config_extra else STRICT_ESCALATION
+    return Engine(make_config(legacy + config_extra), store, environ={**fakes.env, **values})
 
 
 def test_read_only_task_runs_in_place(fakes: Fakes, repo: Path) -> None:

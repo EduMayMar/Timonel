@@ -481,6 +481,17 @@
             "pt": "Descanso de um agente após um limite de uso."
           }
         },
+        "answer_without_changes_max_complexity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "default": 2,
+          "description": "Up to this complexity, an agent that answers without changing any file counts as done instead of escalating (0 always escalates).",
+          "x-i18n": {
+            "es": "Hasta esta complejidad, un agente que responde sin cambiar archivos se da por terminado en vez de escalar (0 escala siempre).",
+            "pt": "Até esta complexidade, um agente que responde sem alterar arquivos conta como concluído em vez de escalar (0 sempre escala)."
+          }
+        },
         "reset_between_attempts": {
           "type": "boolean",
           "default": true,
@@ -1321,6 +1332,24 @@
             "pt": "Pedir confirmação depois de mostrar o plano de uma tarefa."
           }
         },
+        "confirm_read_only": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also ask for confirmation before read-only tasks that cannot change files.",
+          "x-i18n": {
+            "es": "Pedir confirmación también antes de tareas de solo lectura que no pueden cambiar archivos.",
+            "pt": "Pedir confirmação também antes de tarefas somente leitura que não podem alterar arquivos."
+          }
+        },
+        "classify_with_model": {
+          "type": "boolean",
+          "default": true,
+          "description": "Classify each task with the cheap classifier model before planning, instead of keyword rules only.",
+          "x-i18n": {
+            "es": "Clasificar cada tarea con el modelo clasificador barato antes de planificar, en vez de solo reglas de palabras clave.",
+            "pt": "Classificar cada tarefa com o modelo classificador barato antes de planejar, em vez de só regras de palavras-chave."
+          }
+        },
         "clear_screen": {
           "type": "boolean",
           "default": true,
@@ -2158,6 +2187,17 @@
           "x-i18n": {
             "es": "Palabras que marcan un cambio trivial.",
             "pt": "Palavras que marcam uma mudança trivial."
+          }
+        },
+        "chat_words": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Words of a plain greeting or thanks; a message made only of these is answered read-only instead of editing files.",
+          "x-i18n": {
+            "es": "Palabras de un saludo o agradecimiento; un mensaje formado solo por ellas se responde en solo lectura sin editar archivos.",
+            "pt": "Palavras de uma saudação ou agradecimento; uma mensagem feita só delas é respondida em somente leitura, sem editar arquivos."
           }
         },
         "risky_words": {

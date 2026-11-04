@@ -211,6 +211,7 @@ class Heuristics:
     broad_words: tuple[str, ...] = ()
     trivial_words: tuple[str, ...] = ()
     risky_words: tuple[str, ...] = ()
+    chat_words: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -251,6 +252,7 @@ class Escalation:
     context_attempts: int = 2
     cooldown_minutes: int = 30
     reset_between_attempts: bool = True
+    answer_without_changes_max_complexity: int = 2
 
 
 @dataclass(frozen=True)
@@ -363,6 +365,8 @@ class TuiSettings:
     theme: Literal["auto", "dark", "light"] = "auto"
     show_spend: bool = True
     check_on_start: bool = True
+    classify_with_model: bool = True
+    confirm_read_only: bool = False
     check_timeout_s: int = 20
     status_cache_s: int = 300
     refresh_s: float = 1.0
