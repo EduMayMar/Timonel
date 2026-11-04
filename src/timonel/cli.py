@@ -16,7 +16,7 @@ from rich.table import Table
 
 from timonel import __version__, commands, gitops
 from timonel.config import Config, ConfigError, load_config, user_config_path, validate_text
-from timonel.doctor import AgentHealth, diagnose
+from timonel.doctor import AgentHealth, default_names, diagnose
 from timonel.engine import Engine, RunOptions
 from timonel.errors import explain
 from timonel.gitops import GitError
@@ -189,9 +189,44 @@ def make_engine(config: Config, live: bool = False) -> Engine:
     return engine
 
 
+def cmd_home(args: argparse.Namespace, config: Config) -> int:
+    from dataclasses import replace
+
+    from timonel import home, shell
+
+    if getattr(args, "plain", False):
+        config = replace(config, tui=replace(config.tui, plain=True))
+    width = getattr(args, "width", None)
+    target = (
+        console
+        if width is None
+        else Console(width=width, highlight=False, no_color=console.no_color, soft_wrap=False)
+    )
+    cwd = Path.cwd()
+    once = getattr(args, "once", False)
+    if not once and config.tui.enabled and sys.stdin.isatty() and sys.stdout.isatty():
+        return shell.interactive(config, cwd, target)
+    names = tuple(sorted(default_names(config)))
+    board = home.StatusBoard(config, names)
+    if getattr(args, "check", False):
+        board.start()
+        board.wait(config.tui.check_timeout_s + 1)
+    target.print(shell.Shell(config, cwd, target, board=board).header())
+    if not once:
+        target.print(home.help_text(), markup=False, highlight=False)
+    return 0
+
+
+def plan_folder(path: Path) -> Path:
+    try:
+        return gitops.repo_root(path)
+    except GitError:
+        return path.resolve()
+
+
 def cmd_plan(args: argparse.Namespace, config: Config) -> int:
     engine = make_engine(config)
-    root = gitops.repo_root(Path(args.repo))
+    root = plan_folder(Path(args.repo))
     force = parse_force(args.force) if args.force else None
     if args.model_classify:
         plan = engine.preview(args.task, profile=args.profile, force=force, cwd=root)
@@ -224,6 +259,14 @@ def cmd_run(args: argparse.Namespace, config: Config) -> int:
         if not confirm(warning, args.yes):
             errors.print("aborted: dangerous mode needs explicit confirmation")
             return 2
+    folder = Path(args.repo)
+    try:
+        gitops.repo_root(folder)
+    except GitError:
+        errors.print(t("run.needs_git", path=folder.resolve()))
+        if args.json or not sys.stdin.isatty() or not commands.offer_git_init(folder.resolve()):
+            errors.print(t("run.git_hint"))
+            raise
     verify = tuple(split_command(command) for command in args.verify) if args.verify else None
     options = RunOptions(
         task=args.task,
@@ -493,7 +536,20 @@ def build_parser(simple: bool = False) -> argparse.ArgumentParser:
         "--explain", action="store_true", help="show what the command will do and why, then ask"
     )
     parser.add_argument("--lang", choices=("en", "es", "pt"), help="language of messages")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--no-color", action="store_true", help="plain output without colors")
+    parser.set_defaults(handler=cmd_home)
+    sub = parser.add_subparsers(dest="command")
+
+    home_parser = sub.add_parser(
+        "home", help="the home screen (what plain 'timonel' opens in a terminal)"
+    )
+    home_parser.add_argument("--once", action="store_true", help="print the header and exit")
+    home_parser.add_argument(
+        "--check", action="store_true", help="wait for the agent checks before printing"
+    )
+    home_parser.add_argument("--plain", action="store_true", help="plain text for screen readers")
+    home_parser.add_argument("--width", type=int, help="render at this many columns")
+    home_parser.set_defaults(handler=cmd_home)
 
     start = sub.add_parser(
         "start", help="guided setup: install, log in and configure what you need"
@@ -730,6 +786,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     simple = "-h" in arguments or "--help" in arguments
     args = build_parser(simple and simple_mode_requested(arguments)).parse_args(arguments)
     set_language(args.lang or choose("auto"))
+    if args.no_color or os.environ.get("NO_COLOR"):
+        for target in (console, errors, commands.console, commands.errors):
+            target.no_color = True
     try:
         config = load_config(
             Path(args.config) if args.config else None,
@@ -742,10 +801,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if (
             config.project.path is not None
             and not config.project.trusted
-            and args.command not in ("trust", "config")
+            and args.command not in (None, "home", "trust", "config")
         ):
             errors.print(f"[yellow]{escape(t('trust.warning', path=config.project.path))}[/]")
-        if args.explain and not explain_first(args):
+        if args.explain and args.command and not explain_first(args):
             return 0
         return int(args.handler(args, config))
     except KeyboardInterrupt:

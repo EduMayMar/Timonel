@@ -50,9 +50,18 @@ def install_fake_keyring(monkeypatch: pytest.MonkeyPatch, backend: Any) -> None:
 
 
 @pytest.fixture(autouse=True)
-def isolated_system(monkeypatch: pytest.MonkeyPatch) -> MemoryKeyring:
+def isolated_system(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> MemoryKeyring:
     from timonel import wizard
 
+    monkeypatch.setenv("TIMONEL_HOME", str(tmp_path_factory.mktemp("timonel-home")))
+    for index, (key, value) in enumerate(
+        (("commit.gpgsign", "false"), ("init.defaultBranch", "main"))
+    ):
+        monkeypatch.setenv(f"GIT_CONFIG_KEY_{index}", key)
+        monkeypatch.setenv(f"GIT_CONFIG_VALUE_{index}", value)
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
     backend = MemoryKeyring()
     install_fake_keyring(monkeypatch, backend)
     monkeypatch.setattr(wizard, "refresh_windows_path", lambda environ: False)

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -600,3 +601,60 @@ def check_update(current: str) -> str | None:
     except (OSError, KeyError, ValueError):
         return None
     return str(latest) if str(latest) != current else None
+
+
+GIT_INIT_MAX_FILES = 5000
+
+
+def offer_git_init(
+    folder: Path, ask: Callable[[str], str] = ask, say: Callable[[str], None] = console.print
+) -> bool:
+    try:
+        gitops.repo_root(folder)
+    except gitops.GitError:
+        pass
+    else:
+        return True
+    if gitops.too_broad(folder):
+        say(t("git_init.too_broad", path=folder))
+        return False
+    say(t("git_init.explain", path=folder))
+    if not wizard.yes(ask(t("git_init.question") + " [y/N] ")):
+        say(t("git_init.declined"))
+        return False
+    ignore = folder / ".gitignore"
+    if not ignore.exists():
+        say(t("git_init.no_gitignore"))
+        answer = ask(t("git_init.gitignore_question") + " [Y/n] ").strip()
+        if not answer or wizard.yes(answer):
+            ignore.write_text("\n".join(gitops.DEFAULT_GITIGNORE) + "\n", encoding="utf-8")
+            say(t("git_init.gitignore_written"))
+    created = not (folder / ".git").exists()
+
+    def undo() -> None:
+        if created:
+            shutil.rmtree(folder / ".git", ignore_errors=True)
+
+    gitops.init_repo(folder)
+    try:
+        files = gitops.pending_files(folder)
+        risky = [name for name in files if gitops.is_sensitive(name)]
+        say(t("git_init.files", count=len(files)))
+        if len(files) > GIT_INIT_MAX_FILES:
+            say(t("git_init.too_many", count=len(files)))
+            undo()
+            return False
+        if risky:
+            say(t("git_init.risky"))
+            for name in risky[:20]:
+                say(f"  - {name}")
+            if not wizard.yes(ask(t("git_init.risky_question") + " [y/N] ")):
+                say(t("git_init.no_commit"))
+                undo()
+                return False
+        gitops.first_commit(folder, t("git_init.message"))
+    except (KeyboardInterrupt, EOFError, gitops.GitError):
+        undo()
+        raise
+    say(t("git_init.done"))
+    return True

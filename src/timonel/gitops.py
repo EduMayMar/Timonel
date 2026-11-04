@@ -224,3 +224,75 @@ def merge_into_worktree(worktree: Path, branch: str, message: str) -> bool:
         git(worktree, "merge", "--abort", check=False)
         return False
     return True
+
+
+DEFAULT_GITIGNORE = (
+    ".env",
+    ".env.*",
+    "!.env.example",
+    "node_modules/",
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    "*.pyc",
+    "dist/",
+    "build/",
+    ".DS_Store",
+    "Thumbs.db",
+    "*.log",
+    "*.pem",
+    "*.key",
+    ".envrc",
+)
+SENSITIVE_NAMES = (
+    ".env",
+    ".envrc",
+    ".npmrc",
+    ".pypirc",
+    ".netrc",
+    ".git-credentials",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+)
+SENSITIVE_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".tfstate", ".keystore", ".jks")
+SENSITIVE_FOLDERS = (".ssh", ".aws", ".kube", ".docker", ".gnupg", "node_modules")
+
+
+def is_sensitive(path: str) -> bool:
+    name = PurePosixPath(path).name.lower()
+    if name == ".env.example":
+        return False
+    parts = PurePosixPath(path.lower()).parts[:-1]
+    return (
+        name in SENSITIVE_NAMES
+        or name.startswith((".env.", "secrets."))
+        or name.endswith(SENSITIVE_SUFFIXES)
+        or "credentials" in name
+        or ("service-account" in name and name.endswith(".json"))
+        or any(part in SENSITIVE_FOLDERS for part in parts)
+    )
+
+
+def too_broad(folder: Path) -> bool:
+    target = folder.resolve()
+    home = Path.home().resolve()
+    return target == home or target in home.parents or target.parent == target
+
+
+def init_repo(path: Path) -> None:
+    git(path, "init", "-q")
+
+
+def pending_files(path: Path) -> list[str]:
+    output = git(path, "status", "--porcelain", "--untracked-files=all", "-z")
+    return [entry[3:] for entry in output.split("\0") if len(entry) > 3]
+
+
+def first_commit(path: Path, message: str) -> None:
+    identity: list[str] = []
+    if not git(path, "config", "user.email", check=False).strip():
+        identity = ["-c", "user.name=Timonel user", "-c", "user.email=timonel@localhost"]
+    git(path, "add", "-A")
+    git(path, *identity, "commit", "-q", "--allow-empty", "-m", message)

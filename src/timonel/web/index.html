@@ -780,7 +780,7 @@ async function viewSetup() {
     h("p", { class: "hint" }, t("setup.cli_hint"), " ", h("code", { text: "timonel start" })));
 }
 
-const AREAS = ["general", "routing", "agents", "classifier", "review", "escalation", "verification", "execution", "budgets", "privacy", "ui", "notifications", "hooks", "paths"];
+const AREAS = ["general", "routing", "agents", "classifier", "review", "escalation", "verification", "execution", "budgets", "privacy", "ui", "tui", "notifications", "hooks", "paths"];
 
 function optionInput(option, current, onchange) {
   const id = `opt-${option.key.replace(/[^a-z0-9]/gi, "-")}`;

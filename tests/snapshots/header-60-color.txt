@@ -1,0 +1,20 @@
+[38;2;192;138;44m         ██           [0m  [1mTimonel 9.9.9[0m[2m  ·  agent router[0m     
+[38;2;192;138;44m   ▄▄   ▄▄██▄▄   ▄▄   [0m  Profile: [1mbalanced[0m   Mode: [1msimple[0m   
+[38;2;192;138;44m   ▀████▀▀██▀▀████▀   [0m  /work/projects/shop-api            
+[38;2;192;138;44m    ██▀▄  ██  ▄▀██    [0m  [33mbranch main, uncommitted changes[0m   
+[38;2;192;138;44m   ██   ▀▄██▄▀   ██   [0m  Spend today: $1.25                 
+[38;2;192;138;44m██████████  ██████████[0m  budget left: $3.75 of $5.00 per day
+[38;2;192;138;44m   ██   ▄▀██▀▄   ██   [0m                                     
+[38;2;192;138;44m    ██▄▀  ██  ▀▄██    [0m                                     
+[38;2;192;138;44m   ▄████▄▄██▄▄████▄   [0m                                     
+[38;2;192;138;44m   ▀▀   ▀▀██▀▀   ▀▀   [0m                                     
+[38;2;192;138;44m         ██           [0m                                     
+[2m────────────────────────────────────────────────────────────[0m
+[1mAgents[0m
+[32m● [0m[1mclaude   [0m[32mready        [0m[2m T1-T2 sonnet · T3-T4 opus · classi…[0m
+[31m● [0m[1mcodex    [0m[31mneeds login  [0m[2m T2-T4 default model · plans[0m
+[36m● [0m[1mcopilot  [0m[36mchecking...  [0m[2m T1 auto · classifies[0m
+[90m● [0m[1mdeepseek [0m[90mnot installed[0m[2m T1 deepseek-flash · T2 deepseek-v4…[0m
+[33m! [0mthis project's .timonel.yaml is ignored until you trust it
+→ [1;36mtimonel trust[0m
+[33m! [0mcodex needs you to log in → [1;36mcodex login[0m

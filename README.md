@@ -65,6 +65,15 @@ and [`install/install.ps1`](install/install.ps1). Single-file binaries for Windo
 and a container image, are attached to each release. Step-by-step guides for
 [Windows](docs/install/windows.md), [macOS](docs/install/macos.md) and [Linux](docs/install/linux.md).
 
+## The home screen
+
+Type `timonel` on its own and you get a home screen in the terminal: the state of every agent (checked
+in the background), today's spend, notices with the exact command that fixes each one, and an input
+box. Write a task in your own words, or `/` for commands; Timonel shows the plan and asks before
+running it. Details: [docs/terminal.md](docs/terminal.md).
+
+![Timonel home screen in a terminal, with agent states and the input box](docs/screenshots/terminal-home.png)
+
 ## How it works
 
 ```mermaid
