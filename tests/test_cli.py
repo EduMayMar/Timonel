@@ -243,3 +243,10 @@ def test_run_outside_git_offers_to_create_the_repository(
         capsys, "--config", str(cli_env), "run", "x", "--json", "--repo", str(tmp_path / "other")
     )
     assert code != 0
+
+
+@pytest.mark.parametrize("command", ["plan", "run"])
+def test_blank_task_is_rejected_before_any_agent_runs(cli_env: Path, command: str) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main([command, "   "])
+    assert exit_info.value.code == 2
