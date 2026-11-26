@@ -224,6 +224,12 @@ def plan_folder(path: Path) -> Path:
         return path.resolve()
 
 
+def task_text(value: str) -> str:
+    if not value.strip():
+        raise argparse.ArgumentTypeError("the task is empty")
+    return value
+
+
 def cmd_plan(args: argparse.Namespace, config: Config) -> int:
     engine = make_engine(config)
     root = plan_folder(Path(args.repo))
@@ -597,7 +603,7 @@ def build_parser(simple: bool = False) -> argparse.ArgumentParser:
         ("run", cmd_run, "run a task"),
     ):
         command = sub.add_parser(name, help=help_text)
-        command.add_argument("task")
+        command.add_argument("task", type=task_text)
         command.add_argument("--repo", default=".")
         command.add_argument("--profile")
         command.add_argument("--force", metavar="AGENT[:MODEL]")
